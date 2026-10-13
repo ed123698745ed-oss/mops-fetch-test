@@ -1,10 +1,12 @@
 name: Auto fetch MOPS (relay)
+# 每輪 4 個工作各抓約 50 分鐘，跑完自動啟動下一輪；repo 根目錄有 STOP 檔就停止接力
 on:
   schedule:
-    - cron: "7 * * * *"
+    - cron: "7 */2 * * *"
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: auto-fetch
   cancel-in-progress: false
@@ -19,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
+          if [ -f STOP ]; then echo "STOP 檔存在，不抓"; exit 0; fi
           ARG=$(python3 auto_slice.py ${{ matrix.idx }} 4 60)
           echo "本工作日期：$ARG"
           if [ -n "$ARG" ]; then timeout 52m python3 fetch_year.py "$ARG" x || true; fi
@@ -28,3 +31,17 @@ jobs:
           git config user.name "github-actions" && git config user.email "actions@github.com"
           git add raw data && git commit -m "auto fetch job ${{ matrix.idx }} [skip ci]" || exit 0
           for i in 1 2 3 4 5 6; do git pull --rebase -q && git push -q && break; sleep $((RANDOM % 30 + 5)); done
+  next:
+    needs: fetch
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git pull -q || true
+          if [ -f STOP ]; then echo "STOP，結束接力"; exit 0; fi
+          LEFT=$(python3 auto_slice.py 0 1 100000 | tr ',' '\n' | grep -c . || true)
+          echo "剩餘日期數：$LEFT"
+          if [ "$LEFT" -gt 0 ]; then gh workflow run auto_fetch.yml --ref main; fi
