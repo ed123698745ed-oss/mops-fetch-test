@@ -22,6 +22,7 @@ EXCL = re.compile(r"私募|增資|減資|可轉換公司債|轉換公司債|股�
                   r"庫藏股|股利|除權|除息|上櫃|上市|終止上市|終止櫃檯|下市|興櫃|股票|"
                   r"衍生性|期貨|避險|投資案|處分|取得")
 
+ENG = re.compile(r"工程|營造|發包|承攬|統包|委建")
 out = []
 for r in uniq:
     if r["市場別"] not in ("sii", "otc"):   # 本題股票池只含上市、上櫃
@@ -33,6 +34,8 @@ for r in uniq:
         r2 = dict(r)
         r2["命中位置"] = "主旨" if hit_subj else "主旨含終止詞+說明含合約詞"
         r2["疑似排除主題"] = "、".join(sorted(set(EXCL.findall(subj)))) or ""
+        # Ed 2026-10-13：公司為發包方的工程合約納入，另外標記、分列結果
+        r2["工程合約標記"] = "工程" if ENG.search(subj + r["說明"][:400]) else ""
         out.append(r2)
 
 cols = list(out[0].keys()) if out else []
