@@ -1,0 +1,14 @@
+name: MOPS reachability test
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 test_fetch.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raw-html
+          path: "*.html"
