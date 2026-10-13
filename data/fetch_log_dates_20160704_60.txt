@@ -1,0 +1,87 @@
+2016-07-04 原始282540字元 公告150筆
+2016-07-05 原始376357字元 公告192筆
+2016-07-06 原始408823字元 公告216筆
+2016-07-07 原始547843字元 公告295筆
+2016-07-08 原始195083字元 公告100筆
+2016-07-09 原始23339字元 公告9筆
+2016-07-10 原始16621字元 公告7筆
+2016-07-11 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-11 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-11 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-12 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-12 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-12 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-13 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-13 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-13 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-14 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-14 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-14 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-15 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-15 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-15 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-16 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-16 原始80921字元 公告42筆
+2016-07-17 原始2512字元 公告0筆
+2016-07-18 原始273572字元 公告140筆
+2016-07-19 原始366322字元 公告199筆
+2016-07-20 原始344302字元 公告188筆
+2016-07-21 原始416528字元 公告232筆
+2016-07-22 原始468956字元 公告266筆
+2016-07-23 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-23 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-23 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-24 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-24 原始10314字元 公告3筆
+2016-07-25 原始412652字元 公告228筆
+2016-07-26 原始486989字元 公告267筆
+2016-07-27 原始437914字元 公告233筆
+2016-07-28 原始524614字元 公告277筆
+2016-07-29 原始643657字元 公告334筆
+2016-07-30 原始143590字元 公告71筆
+2016-07-31 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-31 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-07-31 原始28010字元 公告11筆
+2016-08-01 原始285888字元 公告157筆
+2016-08-02 原始425857字元 公告229筆
+2016-08-03 原始451927字元 公告237筆
+2016-08-04 原始549576字元 公告291筆
+2016-08-05 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-05 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-05 原始887333字元 公告467筆
+2016-08-06 原始229991字元 公告116筆
+2016-08-07 原始19814字元 公告10筆
+2016-08-08 原始589371字元 公告315筆
+2016-08-09 原始985245字元 公告522筆
+2016-08-10 原始1449758字元 公告762筆
+2016-08-11 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-11 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-11 原始1506760字元 公告790筆
+2016-08-12 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-12 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-12 原始1159853字元 公告606筆
+2016-08-13 原始328915字元 公告170筆
+2016-08-14 原始19136字元 公告8筆
+2016-08-15 原始380702字元 公告207筆
+2016-08-16 原始304599字元 公告162筆
+2016-08-17 原始262795字元 公告140筆
+2016-08-18 原始395124字元 公告208筆
+2016-08-19 原始362132字元 公告187筆
+2016-08-20 原始77252字元 公告36筆
+2016-08-21 原始10530字元 公告4筆
+2016-08-22 原始200338字元 公告112筆
+2016-08-23 原始316261字元 公告168筆
+2016-08-24 原始322453字元 公告167筆
+2016-08-25 原始356120字元 公告181筆
+2016-08-26 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-26 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-26 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-27 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-27 第2次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-27 第3次錯誤 <urlopen error [Errno 111] Connection refused>
+2016-08-28 原始7461字元 公告2筆
+2016-08-29 原始313786字元 公告165筆
+2016-08-30 原始335425字元 公告175筆
+2016-08-31 原始492442字元 公告267筆
+2016-09-01 原始366153字元 公告194筆
+完成 dates_20160704_60 共解析 10515 筆(未去重)
