@@ -1,14 +1,17 @@
 name: MOPS reachability test
 on:
   push:
+    paths: ["test_fetch.py", ".github/workflows/test.yml"]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: python3 test_fetch.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: raw-html
-          path: "*.html"
+      - run: |
+          mkdir -p out && mv *.html result.txt out/
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out && git commit -m "test results [skip ci]" && git push
