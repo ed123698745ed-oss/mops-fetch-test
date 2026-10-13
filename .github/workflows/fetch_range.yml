@@ -15,10 +15,10 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
-      - run: timeout ${{ inputs.minutes }}m python3 fetch_year.py ${{ inputs.start }} ${{ inputs.end }} || true
+      - run: timeout ${{ inputs.minutes }}m python3 fetch_year.py "${{ inputs.start }}" ${{ inputs.end }} || true
       - if: always()
         run: |
-          gzip -f data/announcements_${{ inputs.start }}_${{ inputs.end }}.csv || true
+          gzip -f data/announcements_*.csv || true
           git config user.name "github-actions" && git config user.email "actions@github.com"
           git add raw data && git commit -m "MOPS ${{ inputs.start }}-${{ inputs.end }} [skip ci]"
           for i in 1 2 3 4 5; do git pull --rebase -q && git push -q && break; sleep $((RANDOM % 20 + 5)); done

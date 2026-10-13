@@ -3,7 +3,11 @@
 #       python fetch_year.py 20230505 20230623 （指定起訖日，含兩端）
 import sys, os, re, gzip, csv, time, datetime, html as H, urllib.request, urllib.parse
 a = sys.argv[1]
-if len(a) == 4:
+dates = None
+if a.startswith("dates:"):       # 指定個別日期：dates:20230726,20230729
+    dates = [datetime.datetime.strptime(x, "%Y%m%d").date() for x in a[6:].split(",")]
+    start, end = dates[0], dates[-1]; tag = "dates_" + a[6:].split(",")[0] + "_" + str(len(dates))
+elif len(a) == 4:
     start, end = datetime.date(int(a),1,1), datetime.date(int(a),12,31); tag = a
 else:
     P = lambda x: datetime.datetime.strptime(x, "%Y%m%d").date()
@@ -37,7 +41,10 @@ def parse(t, qdate):
 out = open(f"data/announcements_{tag}.csv", "w", encoding="utf-8-sig", newline="")
 w = csv.writer(out); w.writerow(["查詢日","市場別","公司代號","公司名稱","發言日期","發言時間","主旨","條款代號h15","款項h16","事實發生日","說明"])
 d = start; n_total = 0
+todo = dates if dates else None
 while d <= end and d <= datetime.date.today():
+    if todo is not None and d not in todo:
+        d += datetime.timedelta(days=1); continue
     rawdir = f"raw/{d.year}"; os.makedirs(rawdir, exist_ok=True)
     f = f"{rawdir}/t05st02_{d:%Y%m%d}.html.gz"
     for attempt in range(3):
