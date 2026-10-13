@@ -1,0 +1,122 @@
+# 025 試抓 程式與來源檔（2026-10-13，Elon）
+# 來源：公開資訊觀測站 每日重大訊息 https://mopsov.twse.com.tw/mops/web/ajax_t05st02 (POST, TYPEK=all)
+# 執行環境：GitHub Actions (repo ed123698745ed-oss/mops-fetch-test)；無金鑰
+# 欄位對應：h?0公司名稱 h?1代號 h?2發言日期 h?3發言時間 h?4主旨 h?5條款代號 h?6款項 h?7事實發生日 h?8說明
+
+######## .github/workflows/fetch.yml ########
+name: Fetch MOPS daily announcements
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        required: true
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 fetch_year.py ${{ inputs.year }}
+      - if: always()
+        run: |
+          gzip -f data/announcements_${{ inputs.year }}.csv || true
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add raw data && git commit -m "MOPS ${{ inputs.year }} [skip ci]" && git pull --rebase && git push
+
+######## fetch_year.py ########
+# 逐日抓公開資訊觀測站「每日重大訊息」(t05st02)，保存原始 HTML(gzip) 並解析成 CSV
+# 用法：python fetch_year.py 2023
+import sys, os, re, gzip, csv, time, datetime, html as H, urllib.request, urllib.parse
+year = int(sys.argv[1])
+URL = "https://mopsov.twse.com.tw/mops/web/ajax_t05st02"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+rawdir = f"raw/{year}"; os.makedirs(rawdir, exist_ok=True); os.makedirs("data", exist_ok=True)
+log = open(f"data/fetch_log_{year}.txt", "a", encoding="utf-8")
+def L(s): print(s); log.write(s + "\n"); log.flush()
+
+def fetch(d):
+    body = urllib.parse.urlencode({"encodeURIComponent":1,"step":1,"step00":0,"firstin":1,"off":1,
+        "TYPEK":"all","year":d.year-1911,"month":f"{d.month:02d}","day":f"{d.day:02d}"}).encode()
+    req = urllib.request.Request(URL, data=body, headers={"User-Agent":UA,"Referer":"https://mopsov.twse.com.tw/mops/web/t05st02"})
+    return urllib.request.urlopen(req, timeout=90).read().decode("utf-8","replace")
+
+form_re = re.compile(r"<form action='/mops/web/ajax_t05st02'.*?</form>", re.S)
+inp_re = re.compile(r"<input type='hidden' name='h(\d+)' value='(.*?)'>", re.S)
+typ_re = re.compile(r'TYPEK\.value="(\w+)"')
+def parse(t, qdate):
+    rows = []
+    for f in form_re.findall(t):
+        v = {"h1"+k[-1]: H.unescape(x) for k, x in inp_re.findall(f)}   # 欄位名 h<序號><0-8>，取最後一位
+        m = typ_re.search(f)
+        if "h11" not in v: continue
+        rows.append([qdate, m.group(1) if m else "", v.get("h11",""), v.get("h10",""), v.get("h12",""), v.get("h13",""),
+                     v.get("h14",""), v.get("h15",""), v.get("h16",""), v.get("h17",""), v.get("h18","")])
+    return rows
+
+out = open(f"data/announcements_{year}.csv", "w", encoding="utf-8-sig", newline="")
+w = csv.writer(out); w.writerow(["查詢日","市場別","公司代號","公司名稱","發言日期","發言時間","主旨","條款代號h15","款項h16","事實發生日","說明"])
+d = datetime.date(year,1,1); n_total = 0
+while d.year == year and d <= datetime.date.today():
+    f = f"{rawdir}/t05st02_{d:%Y%m%d}.html.gz"
+    for attempt in range(3):
+        try:
+            t = fetch(d)
+            if "SECURITY" in t[:3000]:
+                L(f"{d} 被擋(安全性錯誤頁)"); raise SystemExit(2)
+            gzip.open(f, "wt", encoding="utf-8").write(t)
+            rows = parse(t, d.strftime("%Y%m%d")); w.writerows(rows); n_total += len(rows)
+            L(f"{d} 原始{len(t)}字元 公告{len(rows)}筆"); break
+        except SystemExit: raise
+        except Exception as e:
+            L(f"{d} 第{attempt+1}次錯誤 {e}"); time.sleep(10)
+    time.sleep(3)
+    d += datetime.timedelta(days=1)
+out.close(); L(f"完成 {year} 共解析 {n_total} 筆(未去重)")
+
+######## filter_025.py ########
+# 025 候選篩選：從每日重大訊息 CSV 找「合約／授權終止」候選公告（試抓用，規則待 Ed 確認後凍結）
+# 用法：python filter_025.py data/announcements_2023.csv.gz out/candidates_2023.csv
+import sys, csv, gzip, re
+from collections import Counter
+
+src, dst = sys.argv[1], sys.argv[2]
+op = gzip.open if src.endswith(".gz") else open
+rows = list(csv.DictReader(op(src, "rt", encoding="utf-8-sig")))
+
+# 去重：同公司、同發言日期時間、同主旨只留一筆（每日頁面以前一日17:30為界，相鄰查詢日會重疊）
+seen, uniq = set(), []
+for r in rows:
+    k = (r["公司代號"], r["發言日期"], r["發言時間"], r["主旨"])
+    if k not in seen:
+        seen.add(k); uniq.append(r)
+
+TERM = re.compile(r"終止|解除|不續約|不再續約|不予續約|提前結束|提前終止|屆期不續|返還")
+OBJ = re.compile(r"合約|契約|協議|合作|授權|訂單|經銷|代理|供貨|採購|備忘錄|MOU", re.I)
+# 明顯不屬本題（卡上排除或建議排除）的主題，只做標記，不刪除，供人工核對
+EXCL = re.compile(r"私募|增資|減資|可轉換公司債|轉換公司債|股份轉換|合併|分割|收購|併購|公開收購|"
+                  r"租賃|租約|不動產|土地|廠房買賣|借款|聯貸|授信|額度|委任|董事|經理人|會計師|簽證|"
+                  r"庫藏股|股利|除權|除息|上櫃|上市|終止上市|終止櫃檯|下市|興櫃|股票|"
+                  r"衍生性|期貨|避險|投資案|處分|取得")
+
+out = []
+for r in uniq:
+    if r["市場別"] not in ("sii", "otc"):   # 本題股票池只含上市、上櫃
+        continue
+    subj = r["主旨"]
+    hit_subj = bool(TERM.search(subj) and OBJ.search(subj))
+    hit_body = bool(TERM.search(r["說明"]) and OBJ.search(r["說明"])) and bool(TERM.search(subj))
+    if hit_subj or hit_body:
+        r2 = dict(r)
+        r2["命中位置"] = "主旨" if hit_subj else "主旨含終止詞+說明含合約詞"
+        r2["疑似排除主題"] = "、".join(sorted(set(EXCL.findall(subj)))) or ""
+        out.append(r2)
+
+cols = list(out[0].keys()) if out else []
+with open(dst, "w", encoding="utf-8-sig", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=cols); w.writeheader(); w.writerows(out)
+
+print(f"原始 {len(rows)} 筆，去重後 {len(uniq)} 筆，上市櫃 {sum(r['市場別'] in ('sii','otc') for r in uniq)} 筆")
+print(f"候選 {len(out)} 筆；其中疑似排除主題 {sum(1 for r in out if r['疑似排除主題'])} 筆")
+print("候選條款代號(h15,h16):", Counter((r["條款代號h15"], r["款項h16"]) for r in out).most_common(10))
