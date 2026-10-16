@@ -1,0 +1,2 @@
+https://www.twse.com.tw/rwd/zh/announcement/LT185?response=json&sdate=20240901&edate=20241031
+{"stat":"OK","title":"普通股數／TDR單位數增減生效日期","fields":["公司代號","公司簡稱","公告種類","申報序號","主旨","公告日期","普通股數/TDR單位數增減生效日期","本次增(減)股數/單位數","增(減)後上市股數/單位數","內容"],"date":["20261016","20261016",null,null],"data":[]}
