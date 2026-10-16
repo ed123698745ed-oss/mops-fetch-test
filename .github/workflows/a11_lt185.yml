@@ -1,0 +1,18 @@
+name: A11 TWSE LT185
+on:
+  push:
+    paths: ["a11/**", ".github/workflows/a11_lt185.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 a11/run.py || true
+      - run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/lt185 && git commit -m "A11 LT185 results [skip ci]" || true
+          for i in 1 2 3 4 5; do git pull --rebase -q && git push -q && break; sleep 10; done
