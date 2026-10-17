@@ -48,6 +48,12 @@ def main():
     global LOG
     i, n = int(sys.argv[1]), int(sys.argv[2])
     LOG = open(f"{OUT}/_progress_{i}.log", "a")
+    try:
+        with urllib.request.urlopen(API + "?" + urllib.parse.urlencode({"dataset": "TaiwanStockTradingDate", "start_date": "2026-10-01", "end_date": "2026-10-16"}), timeout=60) as r:
+            LOG.write(f"{time.strftime('%H:%M:%S')} PROBE {r.read()[:150]!r}\n")
+    except Exception as e:
+        LOG.write(f"{time.strftime('%H:%M:%S')} PROBE-ERR {e}\n")
+    LOG.flush(); checkpoint(i)
     codes = [c.strip() for c in open("codes_026.txt") if c.strip()]
     mine = codes[i::n]
     if i == 0:
@@ -62,7 +68,7 @@ def main():
             get({"dataset": ds, "data_id": c, "start_date": START, "end_date": END}, f"{OUT}/{c}_{ds}.{ext}")
             time.sleep(1)
         LOG.write(f"{time.strftime('%H:%M:%S')} OK {c}\n"); LOG.flush()
-        if mine.index(c) % 5 == 4: checkpoint(i)
+        checkpoint(i)
     LOG.write(f"{time.strftime('%H:%M:%S')} DONE {len(mine)}\n"); LOG.close()
     checkpoint(i, True)
     print("DONE", i, len(mine), flush=True)
