@@ -1,6 +1,7 @@
 name: 026 prices
 on:
   push:
+    branches: [main]
     paths: ["p026/**", "codes_026.txt", ".github/workflows/p026_prices.yml"]
   workflow_dispatch:
 permissions:
@@ -16,24 +17,11 @@ jobs:
         slice: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
     steps:
       - uses: actions/checkout@v4
-      - run: python3 p026/fetch_prices.py ${{ matrix.slice }} 16
-      - uses: actions/upload-artifact@v4
         with:
-          name: p026-slice-${{ matrix.slice }}
-          path: out/p026
-  commit:
-    needs: fetch
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: art
+          fetch-depth: 1
       - run: |
-          mkdir -p out/p026 && cp -n art/*/* out/p026/ 2>/dev/null || true
-          ls out/p026 | wc -l
-          tar czf out/p026_prices.tar.gz -C out p026 && rm -rf out/p026
           git config user.name "github-actions" && git config user.email "actions@github.com"
-          git add out/p026_prices.tar.gz && git commit -m "026 prices [skip ci]" || true
-          for i in 1 2 3 4 5; do git pull --rebase -q && git push -q && break; sleep 10; done
+          git fetch -q --depth 1 origin p026-data && git checkout -q -B p026-data origin/p026-data || git checkout -q -B p026-data
+          git checkout -q origin/main -- p026 codes_026.txt
+          git reset -q
+          python3 p026/fetch_prices.py ${{ matrix.slice }} 16
