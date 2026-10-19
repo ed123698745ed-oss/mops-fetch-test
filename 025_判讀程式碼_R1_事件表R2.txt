@@ -1,0 +1,413 @@
+===== rules_025.py =====
+# 策略025「重大合約與授權終止後價格反應」判讀規則 R1（凍結於查看任何報酬之前）
+# 依據：策略卡 V01 第 6～8 節；Ed 2026-10-13（工程合約納入但單獨標記）；Ed 2026-10-19（照 Elon 建議的邊界）
+# 原則：只看首次公告當時的主旨與說明文字，不使用任何後續資料或報酬。
+# 本檔是「規則」；無法用規則處理的個案，以 overrides_025.csv 逐筆覆寫並記錄理由（見 run_025.py）。
+import re
+
+RULE_VERSION = "R1"
+
+def norm(s):
+    """主旨常被換行切斷字詞（如「股\n權」），一律去除空白與換行再比對"""
+    return re.sub(r"\s+", "", s or "")
+
+# ───────── 第一階段：候選（找可能的終止類公告）─────────
+TERM = re.compile(r"終止|解除|不續約|不再續約|不予續約|提前結束|提前終止|屆期不續|返還")
+OBJ = re.compile(r"合約|契約|協議|合作|授權|訂單|經銷|代理|供貨|採購|備忘錄|意向書|MOU", re.I)
+
+def is_candidate(subj, body):
+    subj, body = norm(subj), norm(body)
+    hit_subj = bool(TERM.search(subj) and OBJ.search(subj))
+    hit_body = bool(TERM.search(body) and OBJ.search(body)) and bool(TERM.search(subj))
+    return hit_subj or hit_body
+
+# ───────── 第二階段：排除類別（依序，第一個命中者為準；皆看主旨）─────────
+# 卡上明列排除：正常履約完成、一般人事契約、可能終止/協商、傳聞、除權息/增減資/可轉債。
+# 其餘為 Elon 補的邊界（Ed 2026-10-19 同意）：租約、不動產、股權/合資/併購/投資、融資、衍生性、臨床試驗、訴訟、專業服務委任。
+LEASE = re.compile(r"租約|租賃|使用權資產")
+CUSTOMER = re.compile(r"客戶|買主|主要供應商")          # MOPS「重要客戶/供應商停止往來」款項
+# 公司名稱內含「工程/營造」者先剔除，避免把公司名稱誤當工程合約
+ENG_NAME = re.compile(r"[^\s，。、（）()「」『』與及和之]{1,10}(?:工程|營造)(?:股份有限公司|\(股\)公司|（股）公司|有限公司|公司)")
+ENG = re.compile(r"工程|營造|發包|承攬|統包|委建|興建|施工")
+EXCLUDE_RULES = [
+    ("競業禁止",       re.compile(r"競業|同業競爭")),
+    ("集團內部合約",   re.compile(r"本公司與子公司|與子公司[^，。]{2,20}(?:終止|解除)|母子公司")),
+    ("解除限制(非終止)", re.compile(r"解除.{0,15}限制")),
+    ("可轉債/上市櫃",  re.compile(r"轉換公司債|可轉債|公司債|債券|贖回權|終止櫃檯|終止櫃買|終止上櫃|終止上市|終止其上市|特別股|興櫃|掛牌|創新板|下市|存託憑證|GDR|公開發行")),
+    ("專業服務委任",   re.compile(r"會計師|簽證|輔導|承銷商|證券承銷")),
+    ("人事/員工",      re.compile(r"經理人|董事長|總經理|執行長|獨立董事|解任|辭任|聘任|聘僱|勞動契約|僱傭|員工|職務|行員|發言人|主管|營運長|資訊安全長|職稱|之職")),
+    ("股權/合資/併購/投資", re.compile(r"合資|合併|收購|併購|股份轉換|股份交換|換股|股權|股份買賣|股份受讓|受讓.*股份|認購|認股|增資|減資|私募|庫藏股|設立.*公司|投資案|有價證券|分割|"
+                                      r"轉投資|共同投資|聯合投資|投資協議|投資契約|投資興建|大陸投資|赴.*投資|投資.*賭場|出資|終止投資|股利|資本公積|現金返還|理財產品|可終止式")),
+    ("訴訟/仲裁",      re.compile(r"訴訟|起訴|提起|判決|裁定|仲裁|假扣押|民事|刑事|和解|反訴|訴請")),
+    ("融資/保證",      re.compile(r"借款|聯貸|授信|融資|額度|背書|保證|票據|信託|聯合協議|清償|週轉|財務支援|資金貸與|資金融通|貸與|扣押")),
+    ("衍生性商品",     re.compile(r"衍生性|期貨|選擇權|遠期|換匯|交換合約|避險")),
+    ("臨床試驗",       re.compile(r"臨床|收案|試驗")),
+    ("展延(非終止)",   re.compile(r"展延")),
+    ("澄清(歸策略024)", re.compile(r"澄清|媒體報導")),
+    ("洽談(無合約)",   re.compile(r"洽談")),
+]
+CODEV = re.compile(r"合建|共同(?:投資|合資)?興建|興建合作|合作興建|委託興建及都市更新|都市更新|土地合作|土地買賣|不動產買賣|房地買賣|不良債權|合宜住宅|招商|標售|BOT")
+REALESTATE = re.compile(r"土地|不動產|合建|房地|房產|房屋|廠房|預售屋|地上權|地號|都市更新|城市更新|危老|重建|合作開發|開發案|合宜住宅|標售|招商|用地使用權|土地使用權|使用權出讓|BOT")
+UNCERTAIN = re.compile(r"擬|預計|將於|洽談|協商|研議|評估|可能")
+DEFINITE = re.compile(r"董事會決議|董事會通過|董事會已|已通知|已發函|函告|終止通知|已簽署|已終止|已解除|業已|合意終止|雙方同意")
+ASSET = re.compile(r"處分|取得|機器設備|設備案|設備暨系統")
+GENERIC = re.compile(r"^(?:公告|補充公告|更正)?(?:本公司|代子公司[^，與]{0,20})?(?:簽定|簽訂|簽署)?(?:之)?(?:重要)?(?:契約|合約)(?:終止|解除)(?:相關資料|公告|案|事宜)?[。]?$|^公告本公司終止重要合約$|^公告解除契約$|^公告本公司簽署終止合約$")
+PARTNER_STOP = re.compile(r"(?:客戶|供應商).{0,6}(?:終止|停止).{0,4}往來|終止業務往來")
+TRANSFER_AGENT = re.compile(r"股務代理|股務事務|股務業務")
+
+# ───────── 第三階段：合約類型、終止時點、公司角色 ─────────
+LICENSE = re.compile(r"授權|技術移轉|專利|權利金|商標|被授權|特許|license", re.I)
+EARLY = re.compile(r"提前|期前|未屆|屆滿前|期限前|未到期|中途|違約|逾期")
+NONRENEW = re.compile(r"不續約|不再續約|不予續約|屆期不續|期滿後不|屆滿後不|到期後不|到期不|屆期不再")
+
+def role_of(subj, body):
+    t = subj + norm(body)[:300]
+    if re.search(r"被授權|取得.*授權", t): return "被授權方"
+    if re.search(r"授權予|授權他人|授權方", t): return "授權方"
+    if re.search(r"採購|發包|訂購|委建|委託.*(營造|廠商)", t): return "採購方"
+    if re.search(r"經銷|代理|銷售|供貨|供應|代工", t): return "供貨/服務提供者"
+    return "不明"
+
+def classify(subj, body, h15="", h16=""):
+    """回傳 dict：判讀(符合/符合-工程/符合-租賃出租方/排除/待人工)、類別、合約類型、終止時點、公司角色、規則備註"""
+    subj, body = norm(subj), norm(body)
+    out = {"判讀": "", "類別": "", "合約類型": "", "終止時點": "", "公司角色": "", "規則備註": ""}
+    eng = bool(ENG.search(ENG_NAME.sub("", subj)))
+    # 1. 租賃：出租方且為重要客戶 → 納入並標記；其餘租約排除
+    if LEASE.search(subj):
+        if CUSTOMER.search(subj):
+            out.update(判讀="符合-租賃出租方", 類別="租賃出租方/重要客戶", 合約類型="商業合約",
+                       規則備註="Ed 2026-10-19：納入，單獨標記")
+            return _timing(out, subj, body)
+        out.update(判讀="排除", 類別="租約/使用權資產"); return out
+    # 2. 排除類別（工程承攬合約內含「合建」「融資」「投資興建」字樣者不因此排除）
+    for name, rx in EXCLUDE_RULES:
+        if rx.search(subj):
+            if eng and name in ("股權/合資/併購/投資", "融資/保證"):
+                continue
+            out.update(判讀="排除", 類別=name); return out
+    if CODEV.search(subj) or (REALESTATE.search(subj) and not eng and not LICENSE.search(subj)):
+        out.update(判讀="排除", 類別="不動產/土地合建"); return out
+    # 3. 需人工的情形
+    if GENERIC.search(subj):
+        out.update(判讀="待人工", 類別="主旨未載合約對象", 規則備註="需讀說明文字")
+        return _timing(out, subj, body)
+    if ASSET.search(subj) and not LICENSE.search(subj):
+        out.update(判讀="排除", 類別="資產買賣(處分/取得)", 規則備註="Elon 補的邊界：資產買賣合約不屬商業合約/授權，待 Ed 確認")
+        return out
+    if UNCERTAIN.search(subj) and not DEFINITE.search(body[:800]):
+        out.update(判讀="待人工", 類別="非確定/擬終止", 規則備註="卡 6：僅稱可能終止/協商者不納入；擬/預計需人工看是否為確定決議")
+        return _timing(out, subj, body)
+    # 4. 納入
+    if PARTNER_STOP.search(subj):
+        if re.search(r"租賃", body[:800]):
+            out.update(判讀="符合-租賃出租方", 類別="租賃出租方/重要客戶", 合約類型="商業合約", 規則備註="MOPS「重要客戶/供應商終止往來」款項；說明為租賃合約到期不續約；Ed 2026-10-19：出租方納入並標記")
+        else:
+            out.update(判讀="符合", 類別="商業合約", 合約類型="商業合約", 規則備註="MOPS「重要客戶/供應商終止往來」款項")
+        return _timing(out, subj, body)
+    if TERM.search(subj) and OBJ.search(subj):
+        if TRANSFER_AGENT.search(subj):
+            out.update(判讀="符合", 類別="股務代理業務(服務契約)", 合約類型="商業合約", 規則備註="服務契約，單獨標記；是否保留於主樣本由後續決定")
+        elif eng:
+            out.update(判讀="符合-工程", 類別="工程合約(發包方)", 合約類型="工程")
+        elif LICENSE.search(subj) and re.search(r"經銷|代理|供貨|採購|銷售|訂單", subj):
+            out.update(判讀="待人工", 類別="授權/商業混合", 合約類型="混合")
+        elif LICENSE.search(subj):
+            out.update(判讀="符合", 類別="技術與產品授權", 合約類型="技術與產品授權")
+        else:
+            out.update(判讀="符合", 類別="商業合約", 合約類型="商業合約")
+        if re.search(r"備忘錄|意向書|MOU", subj):
+            out["規則備註"] = (out["規則備註"] + "；" if out["規則備註"] else "") + "備忘錄/意向書(Ed 2026-10-19：納入並標記)"
+        return _timing(out, subj, body)
+    out.update(判讀="待人工", 類別="主旨未明示終止合約(僅說明文字命中)")
+    return _timing(out, subj, body)
+
+def _timing(out, subj, body):
+    t = subj + body[:800]
+    if NONRENEW.search(t): out["終止時點"] = "到期不續約"
+    elif EARLY.search(t): out["終止時點"] = "提前終止"
+    else: out["終止時點"] = "不明"
+    out["公司角色"] = role_of(subj, body)
+    return out
+===== run_025.py =====
+# 策略025 判讀執行器：候選 CSV → 規則 R1 → 覆寫表 → 事件表(含事件ID/補充鏈) → 統計
+# 用法：python3 run_025.py [out/cand_*.csv 所在目錄=out] ；每日上線追蹤時，對當日新抓公告跑同一流程，
+#       判讀=符合* 者即為觸發名單，判讀=待人工者需人工判讀後追加到 overrides_025.csv。
+import csv, glob, re, sys, collections
+from datetime import datetime
+from rules_025 import classify, norm, RULE_VERSION
+src = sys.argv[1] if len(sys.argv) > 1 else "out"
+ov = {}
+for r in csv.DictReader(open("overrides_025.csv", encoding="utf-8-sig")):
+    ov[(r["公司代號"], r["發言日期"], r["發言時間"])] = r
+# 事件表 R2（2026-10-19）：候選改由重訊總表「全部市場別」直接篩選，股票池改用上市櫃期間表判斷，
+# 不再看「市場別」欄位（該欄是公司現況，會誤收興櫃期間、漏掉已下市公司）。判讀規則仍為 R1。
+EVENT_TABLE_VERSION = "R2"
+import gzip
+from rules_025 import is_candidate
+PER = {r["公司代號"]: r for r in csv.DictReader(open("listing/上市櫃期間表.csv", encoding="utf-8-sig"))}
+def pool_status(code, d):
+    p = PER.get(code)
+    if not p: return "未上市櫃(興櫃/公開發行)"
+    if d < p["初次上市櫃日"]: return "未上市櫃(興櫃/公開發行)"
+    if p["終止上市櫃日"] and d >= p["終止上市櫃日"]: return "已下市後"
+    return "上市櫃期間"
+rows = []; seen = set()
+for f in sorted(glob.glob("merged/MOPS每日重大訊息_公告總表_20*.csv.gz")):
+    for r in csv.DictReader(gzip.open(f, "rt", encoding="utf-8-sig")):
+        k = (r["公司代號"], r["發言日期"], r["發言時間"], r["主旨"])
+        if k in seen or not is_candidate(r["主旨"], r["說明"]): continue
+        seen.add(k)
+        r["上市櫃狀態"] = pool_status(r["公司代號"], r["發言日期"])
+        c = classify(r["主旨"], r["說明"]); r.update(c); r["判讀來源"] = "規則" + RULE_VERSION
+        o = ov.get((r["公司代號"], r["發言日期"], r["發言時間"]))
+        if o:
+            r["判讀"], r["類別"] = o["覆寫判讀"], o["覆寫類別"]
+            if o["覆寫合約類型"]: r["合約類型"] = o["覆寫合約類型"]
+            r["規則備註"] = o["理由"]; r["判讀來源"] = "人工覆寫"
+        rows.append(r)
+rows.sort(key=lambda r: (r["公司代號"], r["發言日期"], r["發言時間"]))
+# 事件ID：同公司，補充/更正/變更字樣，或 60 日內主旨相同 → 沿用首次公告ID
+SUP = re.compile(r"補充|更正|再次|變更")
+first = {}; last_seen = {}
+def d(s): return datetime.strptime(s, "%Y%m%d")
+for r in rows:
+    if not r["判讀"].startswith("符合") or r["上市櫃狀態"] != "上市櫃期間": r["事件ID"] = ""; r["是否首次"] = ""; continue
+    key = r["公司代號"]; ns = norm(r["主旨"]); ns2 = SUP.sub("", ns)
+    eid = f'{r["公司代號"]}_{r["發言日期"]}_{r["發言時間"]}'
+    prev = last_seen.get((key, ns2))
+    if prev and (d(r["發言日期"]) - d(prev[1])).days <= 60:
+        eid = prev[0]; r["規則備註"] = (r["規則備註"] + "；" if r["規則備註"] else "") + "後續補充，沿用首次事件ID"; r["是否首次"] = "否"
+    else:
+        r["是否首次"] = "是"
+    last_seen[(key, ns2)] = (eid, r["發言日期"]); r["事件ID"] = eid
+cols = ["事件ID","是否首次","公司代號","公司名稱","市場別","上市櫃狀態","發言日期","發言時間","主旨","判讀","類別","合約類型","終止時點","公司角色","規則備註","判讀來源"]
+hdr = rows[0].keys()
+w = csv.writer(open(f"{src}/025_全候選判讀.csv", "w", encoding="utf-8-sig", newline=""))
+hdr = list(dict.fromkeys(list(hdr) + ["事件ID","是否首次"]))
+w.writerow(["規則版本","事件表版本"] + hdr); [w.writerow([RULE_VERSION, EVENT_TABLE_VERSION] + [r.get(c, "") for c in hdr]) for r in rows]
+ev = [r for r in rows if r["判讀"].startswith("符合") and r.get("是否首次") == "是"]
+w = csv.writer(open(f"{src}/025_事件表.csv", "w", encoding="utf-8-sig", newline=""))
+w.writerow(["規則版本","事件表版本"] + cols)
+[w.writerow([RULE_VERSION, EVENT_TABLE_VERSION] + [r.get(c, "") for c in cols]) for r in ev]
+print("候選", len(rows), "｜事件(首次)", len(ev), "｜補充", sum(1 for r in rows if r.get("是否首次") == "否"))
+print("判讀", collections.Counter(r["判讀"] for r in rows))
+print("上市櫃狀態×判讀", collections.Counter((r["上市櫃狀態"], r["判讀"][:2]) for r in rows))
+print("事件 類別", collections.Counter(r["類別"] for r in ev))
+print("事件 終止時點", collections.Counter(r["終止時點"] for r in ev))
+print("事件 年", sorted(collections.Counter(r["發言日期"][:4] for r in ev).items()))
+===== listing/build_periods.py =====
+# 建立「上市櫃期間表」：每家公司初次上市櫃日～終止上市櫃日（不看重訊「市場別」欄位，該欄是現況）
+# 來源優先序：官方(證交所/櫃買 openapi、證交所終止上市清單) > FinMind 下市清單 > 024 興櫃推定表 > 重訊公告文字證據
+# 用法：python3 listing/build_periods.py  → listing/上市櫃期間表.csv
+import json, csv, gzip, glob, re
+N = lambda s: re.sub(r"\s+", "", s or "")
+L = {d["公司代號"]: d["上市日期"] for d in json.load(open("listing/twse_L.json"))}
+O = {d["SecuritiesCompanyCode"]: d["DateOfListing"] for d in json.load(open("listing/tpex_O.json"))}
+def ad(s): y, m, d = s.split("/"); return f"{int(y)+1911}{m}{d}"
+TWD = {x["Code"]: ad(x["DelistingDate"]) for x in json.load(open("delist/raw/twse_openapi_suspendListing.json"))}
+FMD = {x["stock_id"]: x["date"].replace("-", "") for x in json.load(open("listing/delisting_finmind.json"))["data"]}
+MANUAL_END = {"5326": ("20140901", "重訊『公告漢磊科技公司股票終止上櫃』(FinMind 缺)")}
+P = {r["公司代號"]: r["推定興櫃末日(最後一筆異常開盤)"].replace("-", "") for r in csv.DictReader(open("listing/興櫃期間推定表_024.csv", encoding="utf-8-sig"))}
+MIG = re.compile(r"上櫃轉上市|終止上櫃暨|終止上櫃及轉|初次上市暨終止上櫃|終止上櫃.{0,6}轉上市")   # 不可只用「轉上市」：興櫃轉上市也會命中
+FIRST = re.compile(r"(初次上[市櫃]|上[市櫃]前).{0,12}(過額配售|承銷價格|收足股款)|過額配售|上櫃買賣日|上市買賣日")   # 只取掛牌前幾天的公告
+BOND = re.compile(r"債")
+FIRST_OTC = re.compile(r"(初次上櫃|上櫃前).{0,12}(過額配售|承銷價格|收足股款)|初次上櫃過額配售|上櫃買賣日")
+mig, first_ev, first_otc, codes = set(), {}, {}, set()
+for f in sorted(glob.glob("merged/MOPS每日重大訊息_公告總表_20*.csv.gz")):
+    for r in csv.DictReader(gzip.open(f, "rt", encoding="utf-8-sig")):
+        c = r["公司代號"]; codes.add(c); s = N(r["主旨"])
+        if BOND.search(s): continue
+        if MIG.search(s): mig.add(c)
+        if FIRST.search(s) and "興櫃" not in s: first_ev.setdefault(c, []).append(r["發言日期"])
+        if FIRST_OTC.search(s) and "興櫃" not in s and "上市" not in s: first_otc.setdefault(c, []).append(r["發言日期"])
+def nxt(d):  # 推定興櫃末日的下一日視為上市櫃起日（近似）
+    import datetime; x = datetime.datetime.strptime(d, "%Y%m%d") + datetime.timedelta(days=1); return x.strftime("%Y%m%d")
+out = []
+for c in sorted(codes | set(L) | set(O)):
+    end, end_src = "", ""
+    if c in TWD: end, end_src = TWD[c], "證交所終止上市清單"
+    elif c in FMD: end, end_src = FMD[c], "FinMind下市清單"
+    elif c in MANUAL_END: end, end_src = MANUAL_END[c]
+    if c in L or c in O: end, end_src = "", ""          # 現仍上市櫃
+    if c in O:
+        first, src = O[c], "櫃買中心openapi上櫃日"
+    elif c in L:
+        if c in mig:
+            if c in P: first, src = nxt(P[c]), "先上櫃後轉上市：024推定興櫃末日+1"
+            elif c in first_otc and min(first_otc[c]) < L[c]: first, src = min(first_otc[c]), "先上櫃後轉上市：重訊初次上櫃公告日(近似)"
+            else: first, src = "19000101", "先上櫃後轉上市：上櫃早於資料起點"
+        else: first, src = L[c], "證交所openapi上市日"
+    elif end:
+        if c in P: first, src = nxt(P[c]), "已下市：024推定興櫃末日+1"
+        elif c in first_ev: first, src = min(first_ev[c]), "已下市：重訊初次上市櫃公告日(近似)"
+        else: first, src = "19000101", "已下市：上市櫃早於資料起點"
+    else:
+        continue   # 從未上市櫃（公開發行/興櫃）
+    out.append([c, first, end, src, end_src])
+w = csv.writer(open("listing/上市櫃期間表.csv", "w", encoding="utf-8-sig", newline=""))
+w.writerow(["公司代號", "初次上市櫃日", "終止上市櫃日", "初次日來源", "終止日來源"]); w.writerows(out)
+print("公司數", len(out), "已下市", sum(1 for x in out if x[2]))
+===== delist/fetch_delist.py =====
+# 抓官方終止上市清單（證交所擋雲端 IP，故在 GitHub Actions 跑）
+import urllib.request, json, os, time
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/129.0 Safari/537.36"}
+def get(u, f):
+    for i in range(3):
+        try:
+            t = urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=60).read()
+            open(f, "wb").write(t); print("OK", len(t), u); return
+        except Exception as e:
+            print("ERR", i, u, e); time.sleep(5)
+os.makedirs("delist/raw", exist_ok=True)
+get("https://openapi.twse.com.tw/v1/company/suspendListingCsvAndHtml", "delist/raw/twse_openapi_suspendListing.json")
+for y in range(2005, 2027):
+    get(f"https://www.twse.com.tw/rwd/zh/company/suspendListing?selectYear={y}&response=json", f"delist/raw/twse_rwd_{y}.json")
+    time.sleep(3)
+for u, f in [("https://www.tpex.org.tw/openapi/v1/tpex_spendi_history", "tpex_spendi_history.json")]:
+    get(u, "delist/raw/" + f)
+===== filter_025.py =====
+# 025 候選篩選：從每日重大訊息 CSV 找「合約／授權終止」候選公告（試抓用，規則待 Ed 確認後凍結）
+# 用法：python filter_025.py data/announcements_2023.csv.gz out/candidates_2023.csv
+import sys, csv, gzip, re
+from collections import Counter
+
+src, dst = sys.argv[1], sys.argv[2]
+op = gzip.open if src.endswith(".gz") else open
+rows = list(csv.DictReader(op(src, "rt", encoding="utf-8-sig")))
+
+# 去重：同公司、同發言日期時間、同主旨只留一筆（每日頁面以前一日17:30為界，相鄰查詢日會重疊）
+seen, uniq = set(), []
+for r in rows:
+    k = (r["公司代號"], r["發言日期"], r["發言時間"], r["主旨"])
+    if k not in seen:
+        seen.add(k); uniq.append(r)
+
+TERM = re.compile(r"終止|解除|不續約|不再續約|不予續約|提前結束|提前終止|屆期不續|返還")
+OBJ = re.compile(r"合約|契約|協議|合作|授權|訂單|經銷|代理|供貨|採購|備忘錄|MOU", re.I)
+# 明顯不屬本題（卡上排除或建議排除）的主題，只做標記，不刪除，供人工核對
+EXCL = re.compile(r"私募|增資|減資|可轉換公司債|轉換公司債|股份轉換|合併|分割|收購|併購|公開收購|"
+                  r"租賃|租約|不動產|土地|廠房買賣|借款|聯貸|授信|額度|委任|董事|經理人|會計師|簽證|"
+                  r"庫藏股|股利|除權|除息|上櫃|上市|終止上市|終止櫃檯|下市|興櫃|股票|"
+                  r"衍生性|期貨|避險|投資案|處分|取得")
+
+ENG = re.compile(r"工程|營造|發包|承攬|統包|委建")
+out = []
+for r in uniq:
+    if r["市場別"] not in ("sii", "otc"):   # 本題股票池只含上市、上櫃
+        continue
+    subj = r["主旨"]
+    hit_subj = bool(TERM.search(subj) and OBJ.search(subj))
+    hit_body = bool(TERM.search(r["說明"]) and OBJ.search(r["說明"])) and bool(TERM.search(subj))
+    if hit_subj or hit_body:
+        r2 = dict(r)
+        r2["命中位置"] = "主旨" if hit_subj else "主旨含終止詞+說明含合約詞"
+        r2["疑似排除主題"] = "、".join(sorted(set(EXCL.findall(subj)))) or ""
+        # Ed 2026-10-13：公司為發包方的工程合約納入，另外標記、分列結果
+        r2["工程合約標記"] = "工程" if ENG.search(subj + r["說明"][:400]) else ""
+        out.append(r2)
+
+cols = list(out[0].keys()) if out else []
+with open(dst, "w", encoding="utf-8-sig", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=cols); w.writeheader(); w.writerows(out)
+
+print(f"原始 {len(rows)} 筆，去重後 {len(uniq)} 筆，上市櫃 {sum(r['市場別'] in ('sii','otc') for r in uniq)} 筆")
+print(f"候選 {len(out)} 筆；其中疑似排除主題 {sum(1 for r in out if r['疑似排除主題'])} 筆")
+print("候選條款代號(h15,h16):", Counter((r["條款代號h15"], r["款項h16"]) for r in out).most_common(10))
+===== merge_all.py =====
+# 合併所有抓取分段的公告 CSV，依年份輸出去重後的公告總表，並列出每年缺漏日期
+# 用法：python merge_all.py
+import csv, gzip, glob, os, datetime
+from collections import defaultdict
+
+os.makedirs("merged", exist_ok=True)
+hdr, by_year, seen = None, defaultdict(list), set()
+for f in sorted(glob.glob("data/announcements_*.csv.gz")):
+    for r in csv.reader(gzip.open(f, "rt", encoding="utf-8-sig")):
+        if r[0] == "查詢日":
+            hdr = r; continue
+        k = (r[2], r[4], r[5], r[6])          # 公司代號、發言日期、發言時間、主旨
+        if k in seen:
+            continue
+        seen.add(k); by_year[r[4][:4]].append(r)
+
+for y, rows in sorted(by_year.items()):
+    rows.sort(key=lambda r: (r[4], r[5], r[2]))
+    with gzip.open(f"merged/MOPS每日重大訊息_公告總表_{y}.csv.gz", "wt", encoding="utf-8-sig", newline="") as g:
+        w = csv.writer(g); w.writerow(hdr); w.writerows(rows)
+    print(y, "去重後", len(rows), "上市櫃", sum(r[1] in ("sii", "otc") for r in rows))
+
+# 缺漏日期：以 raw 原始檔是否存在判斷（查詢日）
+for ydir in sorted(glob.glob("raw/*")):
+    y = int(os.path.basename(ydir))
+    have = {os.path.basename(p)[8:16] for p in glob.glob(f"{ydir}/*.html.gz")}
+    d, miss = datetime.date(y, 1, 1), []
+    while d.year == y and d <= datetime.date.today():
+        if d.strftime("%Y%m%d") not in have:
+            miss.append(d.strftime("%m%d"))
+        d += datetime.timedelta(days=1)
+    print(y, "已抓", len(have), "天，缺", len(miss), "天", (miss if len(miss) <= 40 else miss[:5] + ["…"] + miss[-5:]))
+===== fetch_year.py =====
+# 逐日抓公開資訊觀測站「每日重大訊息」(t05st02)，保存原始 HTML(gzip) 並解析成 CSV
+# 用法：python fetch_year.py 2023            （整年）
+#       python fetch_year.py 20230505 20230623 （指定起訖日，含兩端）
+import sys, os, re, gzip, csv, time, datetime, html as H, urllib.request, urllib.parse
+a = sys.argv[1]
+dates = None
+if a.startswith("dates:"):       # 指定個別日期：dates:20230726,20230729
+    dates = [datetime.datetime.strptime(x, "%Y%m%d").date() for x in a[6:].split(",")]
+    start, end = dates[0], dates[-1]; tag = "dates_" + a[6:].split(",")[0] + "_" + str(len(dates))
+elif len(a) == 4:
+    start, end = datetime.date(int(a),1,1), datetime.date(int(a),12,31); tag = a
+else:
+    P = lambda x: datetime.datetime.strptime(x, "%Y%m%d").date()
+    start, end = P(a), P(sys.argv[2]); tag = f"{a}_{sys.argv[2]}"
+year = start.year
+URL = "https://mopsov.twse.com.tw/mops/web/ajax_t05st02"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+rawdir = f"raw/{year}"; os.makedirs(rawdir, exist_ok=True); os.makedirs("data", exist_ok=True)
+log = open(f"data/fetch_log_{tag}.txt", "a", encoding="utf-8")
+def L(s): print(s); log.write(s + "\n"); log.flush()
+
+def fetch(d):
+    body = urllib.parse.urlencode({"encodeURIComponent":1,"step":1,"step00":0,"firstin":1,"off":1,
+        "TYPEK":"all","year":d.year-1911,"month":f"{d.month:02d}","day":f"{d.day:02d}"}).encode()
+    req = urllib.request.Request(URL, data=body, headers={"User-Agent":UA,"Referer":"https://mopsov.twse.com.tw/mops/web/t05st02"})
+    return urllib.request.urlopen(req, timeout=90).read().decode("utf-8","replace")
+
+form_re = re.compile(r"<form action='/mops/web/ajax_t05st02'.*?</form>", re.S)
+inp_re = re.compile(r"<input type='hidden' name='h(\d+)' value='(.*?)'>", re.S)
+typ_re = re.compile(r'TYPEK\.value="(\w+)"')
+def parse(t, qdate):
+    rows = []
+    for f in form_re.findall(t):
+        v = {"h1"+k[-1]: H.unescape(x) for k, x in inp_re.findall(f)}   # 欄位名 h<序號><0-8>，取最後一位
+        m = typ_re.search(f)
+        if "h11" not in v: continue
+        rows.append([qdate, m.group(1) if m else "", v.get("h11",""), v.get("h10",""), v.get("h12",""), v.get("h13",""),
+                     v.get("h14",""), v.get("h15",""), v.get("h16",""), v.get("h17",""), v.get("h18","")])
+    return rows
+
+out = open(f"data/announcements_{tag}.csv", "w", encoding="utf-8-sig", newline="")
+w = csv.writer(out); w.writerow(["查詢日","市場別","公司代號","公司名稱","發言日期","發言時間","主旨","條款代號h15","款項h16","事實發生日","說明"])
+d = start; n_total = 0
+todo = dates if dates else None
+while d <= end and d <= datetime.date.today():
+    if todo is not None and d not in todo:
+        d += datetime.timedelta(days=1); continue
+    rawdir = f"raw/{d.year}"; os.makedirs(rawdir, exist_ok=True)
+    f = f"{rawdir}/t05st02_{d:%Y%m%d}.html.gz"
+    for attempt in range(3):
+        try:
+            t = fetch(d)
+            if "SECURITY" in t[:3000]:
+                L(f"{d} 被擋(安全性錯誤頁)"); raise SystemExit(2)
+            gzip.open(f, "wt", encoding="utf-8").write(t)
+            rows = parse(t, d.strftime("%Y%m%d")); w.writerows(rows); out.flush(); n_total += len(rows)
+            L(f"{d} 原始{len(t)}字元 公告{len(rows)}筆"); break
+        except SystemExit: raise
+        except Exception as e:
+            L(f"{d} 第{attempt+1}次錯誤 {e}"); time.sleep(10)
+    time.sleep(3)
+    d += datetime.timedelta(days=1)
+out.close(); L(f"完成 {tag} 共解析 {n_total} 筆(未去重)")

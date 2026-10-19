@@ -8,9 +8,25 @@ src = sys.argv[1] if len(sys.argv) > 1 else "out"
 ov = {}
 for r in csv.DictReader(open("overrides_025.csv", encoding="utf-8-sig")):
     ov[(r["公司代號"], r["發言日期"], r["發言時間"])] = r
-rows = []
-for f in sorted(glob.glob(f"{src}/cand_*.csv")):
-    for r in csv.DictReader(open(f, encoding="utf-8-sig")):
+# 事件表 R2（2026-10-19）：候選改由重訊總表「全部市場別」直接篩選，股票池改用上市櫃期間表判斷，
+# 不再看「市場別」欄位（該欄是公司現況，會誤收興櫃期間、漏掉已下市公司）。判讀規則仍為 R1。
+EVENT_TABLE_VERSION = "R2"
+import gzip
+from rules_025 import is_candidate
+PER = {r["公司代號"]: r for r in csv.DictReader(open("listing/上市櫃期間表.csv", encoding="utf-8-sig"))}
+def pool_status(code, d):
+    p = PER.get(code)
+    if not p: return "未上市櫃(興櫃/公開發行)"
+    if d < p["初次上市櫃日"]: return "未上市櫃(興櫃/公開發行)"
+    if p["終止上市櫃日"] and d >= p["終止上市櫃日"]: return "已下市後"
+    return "上市櫃期間"
+rows = []; seen = set()
+for f in sorted(glob.glob("merged/MOPS每日重大訊息_公告總表_20*.csv.gz")):
+    for r in csv.DictReader(gzip.open(f, "rt", encoding="utf-8-sig")):
+        k = (r["公司代號"], r["發言日期"], r["發言時間"], r["主旨"])
+        if k in seen or not is_candidate(r["主旨"], r["說明"]): continue
+        seen.add(k)
+        r["上市櫃狀態"] = pool_status(r["公司代號"], r["發言日期"])
         c = classify(r["主旨"], r["說明"]); r.update(c); r["判讀來源"] = "規則" + RULE_VERSION
         o = ov.get((r["公司代號"], r["發言日期"], r["發言時間"]))
         if o:
@@ -24,7 +40,7 @@ SUP = re.compile(r"補充|更正|再次|變更")
 first = {}; last_seen = {}
 def d(s): return datetime.strptime(s, "%Y%m%d")
 for r in rows:
-    if not r["判讀"].startswith("符合"): r["事件ID"] = ""; continue
+    if not r["判讀"].startswith("符合") or r["上市櫃狀態"] != "上市櫃期間": r["事件ID"] = ""; r["是否首次"] = ""; continue
     key = r["公司代號"]; ns = norm(r["主旨"]); ns2 = SUP.sub("", ns)
     eid = f'{r["公司代號"]}_{r["發言日期"]}_{r["發言時間"]}'
     prev = last_seen.get((key, ns2))
@@ -33,16 +49,18 @@ for r in rows:
     else:
         r["是否首次"] = "是"
     last_seen[(key, ns2)] = (eid, r["發言日期"]); r["事件ID"] = eid
-cols = ["事件ID","是否首次","公司代號","公司名稱","市場別","發言日期","發言時間","主旨","判讀","類別","合約類型","終止時點","公司角色","規則備註","判讀來源"]
+cols = ["事件ID","是否首次","公司代號","公司名稱","市場別","上市櫃狀態","發言日期","發言時間","主旨","判讀","類別","合約類型","終止時點","公司角色","規則備註","判讀來源"]
 hdr = rows[0].keys()
 w = csv.writer(open(f"{src}/025_全候選判讀.csv", "w", encoding="utf-8-sig", newline=""))
-w.writerow(["規則版本"] + [c for c in hdr]); [w.writerow([RULE_VERSION] + list(r.values())) for r in rows]
+hdr = list(dict.fromkeys(list(hdr) + ["事件ID","是否首次"]))
+w.writerow(["規則版本","事件表版本"] + hdr); [w.writerow([RULE_VERSION, EVENT_TABLE_VERSION] + [r.get(c, "") for c in hdr]) for r in rows]
 ev = [r for r in rows if r["判讀"].startswith("符合") and r.get("是否首次") == "是"]
 w = csv.writer(open(f"{src}/025_事件表.csv", "w", encoding="utf-8-sig", newline=""))
-w.writerow(["規則版本"] + [c for c in cols if c in hdr or c in ("事件ID","是否首次")])
-[w.writerow([RULE_VERSION] + [r.get(c, "") for c in cols if c in hdr or c in ("事件ID","是否首次")]) for r in ev]
+w.writerow(["規則版本","事件表版本"] + cols)
+[w.writerow([RULE_VERSION, EVENT_TABLE_VERSION] + [r.get(c, "") for c in cols]) for r in ev]
 print("候選", len(rows), "｜事件(首次)", len(ev), "｜補充", sum(1 for r in rows if r.get("是否首次") == "否"))
 print("判讀", collections.Counter(r["判讀"] for r in rows))
+print("上市櫃狀態×判讀", collections.Counter((r["上市櫃狀態"], r["判讀"][:2]) for r in rows))
 print("事件 類別", collections.Counter(r["類別"] for r in ev))
 print("事件 終止時點", collections.Counter(r["終止時點"] for r in ev))
 print("事件 年", sorted(collections.Counter(r["發言日期"][:4] for r in ev).items()))
