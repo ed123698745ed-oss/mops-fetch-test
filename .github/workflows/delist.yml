@@ -1,0 +1,18 @@
+name: Fetch delisting lists
+on:
+  push:
+    paths: ["delist/REQUEST"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 delist/fetch_delist.py | tee delist/fetch_log.txt
+      - run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add delist && git commit -m "delist fetch [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do git pull --rebase -q && git push -q && break; sleep 10; done
