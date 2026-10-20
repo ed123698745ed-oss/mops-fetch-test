@@ -21,6 +21,6 @@ for r in E_ + obs:
 for sid in ["TAIEX", "TPEx"]:
     get("TaiwanStockPrice", sid, "2009-12-01", "2026-10-19")
 for sid, (a, b) in sorted(codes.items()):
-    s = (a - dt.timedelta(days=15)).strftime("%Y-%m-%d"); e = min(b + dt.timedelta(days=100), dt.datetime(2026, 10, 19)).strftime("%Y-%m-%d")
+    s = (a - dt.timedelta(days=15)).strftime("%Y-%m-%d"); e = min(b + dt.timedelta(days=300), dt.datetime(2026, 10, 19)).strftime("%Y-%m-%d")
     get("TaiwanStockPrice", sid, s, e); get("TaiwanStockDividendResult", sid, s, e); time.sleep(0.5)
 print("codes", len(codes))

@@ -10,7 +10,7 @@ for r in csv.DictReader(open("overrides_025.csv", encoding="utf-8-sig")):
     ov[(r["公司代號"], r["發言日期"], r["發言時間"])] = r
 # 事件表 R2（2026-10-19）：候選改由重訊總表「全部市場別」直接篩選，股票池改用上市櫃期間表判斷，
 # 不再看「市場別」欄位（該欄是公司現況，會誤收興櫃期間、漏掉已下市公司）。判讀規則仍為 R1。
-EVENT_TABLE_VERSION = "R2"
+EVENT_TABLE_VERSION = "R3"
 import gzip
 from rules_025 import is_candidate
 PER = {r["公司代號"]: r for r in csv.DictReader(open("listing/上市櫃期間表.csv", encoding="utf-8-sig"))}
@@ -35,24 +35,25 @@ for f in sorted(glob.glob("merged/MOPS每日重大訊息_公告總表_20*.csv.gz
             r["規則備註"] = o["理由"]; r["判讀來源"] = "人工覆寫"
         rows.append(r)
 rows.sort(key=lambda r: (r["公司代號"], r["發言日期"], int(r["發言時間"] or 0)))   # 時間未補零，須轉整數排序
-# 事件ID：同公司，補充/更正/變更字樣，或 60 日內主旨相同 → 沿用首次公告ID
-SUP = re.compile(r"補充|更正|再次|變更")
-first = {}; last_seen = {}; last_any = {}
+# 事件ID（事件表 R3，2026-10-20 依 Eve 審查修正）：策略卡第8節「同公司、同合約以首次明確終止公告為一事件」。
+# 自動規則只保留：同公司 60 日內主旨相同（去除補充／更正／更補／變更／再次字樣）。其餘同合約鏈一律由人工讀原文判斷，記於 chain_025.csv（含理由）。
+# 已取消 R2 的「同公司 5 日內一律合併」規則（無法證明是同一合約；不同合約即使同日也各為一事件，持倉重疊另做敏感度）。
+SUP = re.compile(r"補充|更正|更補|再次|變更")
+CH = {r["子公告"]: (r["沿用事件ID"], r["理由"]) for r in csv.DictReader(open("chain_025.csv", encoding="utf-8-sig"))}
+last_seen = {}
 def d(s): return datetime.strptime(s, "%Y%m%d")
 for r in rows:
     if not r["判讀"].startswith("符合") or r["上市櫃狀態"] != "上市櫃期間": r["事件ID"] = ""; r["是否首次"] = ""; continue
-    key = r["公司代號"]; ns = norm(r["主旨"]); ns2 = SUP.sub("", ns)
-    eid = f'{r["公司代號"]}_{r["發言日期"]}_{r["發言時間"]}'
+    key = r["公司代號"]; ns2 = SUP.sub("", norm(r["主旨"]))
+    me = f'{r["公司代號"]}_{r["發言日期"]}_{r["發言時間"]}'
     prev = last_seen.get((key, ns2))
-    if not (prev and (d(r["發言日期"]) - d(prev[1])).days <= 60):
-        near = last_any.get(key)   # 同公司 5 日內另一則終止公告（母子公司同時公告、同案拆多則）視為同一事件
-        prev = near if (near and (d(r["發言日期"]) - d(near[1])).days <= 5) else None
-    if prev:
-        eid = prev[0]; r["規則備註"] = (r["規則備註"] + "；" if r["規則備註"] else "") + "後續補充或同案，沿用首次事件ID"; r["是否首次"] = "否"
+    if me in CH:
+        eid, why = CH[me]; r["規則備註"] = (r["規則備註"] + "；" if r["規則備註"] else "") + "同合約公告鏈(人工)：" + why; r["是否首次"] = "否"
+    elif prev and (d(r["發言日期"]) - d(prev[1])).days <= 60:
+        eid = prev[0]; r["規則備註"] = (r["規則備註"] + "；" if r["規則備註"] else "") + "同主旨後續公告，沿用首次事件ID"; r["是否首次"] = "否"
     else:
-        r["是否首次"] = "是"
+        eid = me; r["是否首次"] = "是"
     last_seen[(key, ns2)] = (eid, r["發言日期"]); r["事件ID"] = eid
-    if r["是否首次"] == "是": last_any[key] = (eid, r["發言日期"])
 # 發動方（2026-10-20 回測前預先登記的分層變數；依首次公告主旨＋說明前600字）
 def initiator(r):
     t = norm(r["主旨"]) + norm(r.get("說明", ""))[:600]
