@@ -3,6 +3,7 @@ import json, os, time, urllib.request, sys
 OUT = "out/p026_official"; os.makedirs(OUT, exist_ok=True)
 UA = {"User-Agent": "Mozilla/5.0"}
 need = [l.split() for l in open(sys.argv[1] if len(sys.argv) > 1 else "p026/official_need.txt") if l.strip()]
+if len(sys.argv) > 3: i, n = int(sys.argv[2]), int(sys.argv[3]); need = need[i::n]   # 分片平行抓取
 fail = []
 for mkt, code, ym in need:
     path = f"{OUT}/{mkt}_{code}_{ym}.json"
@@ -21,5 +22,5 @@ for mkt, code, ym in need:
     if not ok: fail.append(url)
     print("ok" if ok else "FAIL", mkt, code, ym, flush=True)
     time.sleep(10 if mkt == "sii" else 3)
-open(f"{OUT}/_fail.txt", "w").write("\n".join(fail))
+open(f"{OUT}/_fail_{sys.argv[2] if len(sys.argv) > 3 else 0}.txt", "w").write("\n".join(fail))
 print("done fail", len(fail))
