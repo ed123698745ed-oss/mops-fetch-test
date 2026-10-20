@@ -1,4 +1,9 @@
-# 策略025 回測 R02（2026-10-20，依 Eve V01/R01 審查退回意見修正；口徑依策略卡 V01 第 9～14 節）
+# 策略025 回測 R03（2026-10-21，Ed 00:54 指示「好修正R03」；R02 為 2026-10-20 依 Eve V01/R01 審查退回意見修正；口徑依策略卡 V01 第 9～14 節）
+# R03 相對 R02：
+#  a. 跳價檢查改為「與前一有效收盤相隔 n 個市場交易日時，容許 n 日累積漲跌停幅度＋1.5 個百分點」。R02 用單日限制，
+#     把中間無成交日的連續漲跌停誤判為公司行動（地心引力 3629、勝昱 4304、中茂 5205 共 6 筆）。
+#  b. 已核對的公司行動以 corporate_actions_025.csv 調整（現依 MOPS 公告與官方參考價公式）：陞泰 8072 2017 現金減資，
+#     恢復買賣日因子＝停止買賣前收盤 ÷ 恢復買賣參考價（等同除權息因子的處理）。
 # 與 R01 的差異：
 #  1. 持有天數一律以「市場交易日」計（日曆＝FinMind 加權指數有收盤的日期），不再以個股有效日K計。
 #  2. 進場日 E＝公告日期之後第一個市場交易日；E 當日個股無有效開盤（無資料、成交量 0、開盤≤0）→ 列「進場無法成交」，不自行延後。
@@ -29,9 +34,19 @@ def stock(sid):
     if sid not in CACHE:
         px = {x["date"]: x for x in load(sid)}
         dv = {x["date"]: x["before_price"] / x["after_price"] for x in load(sid, "TaiwanStockDividendResult") if x.get("after_price")}
+        for c in CA.get(sid, []): dv[c["恢復買賣日"]] = dv.get(c["恢復買賣日"], 1.0) * float(c["停止買賣前收盤"]) / float(c["恢復買賣參考價"])
         CACHE[sid] = (px, dv)
     return CACHE[sid]
+CA = {}
+for c in csv.DictReader(open("corporate_actions_025.csv", encoding="utf-8-sig")): CA.setdefault(c["公司代號"], []).append(c)
 def valid(x): return x is not None and x["Trading_Volume"] > 0 and x["open"] > 0 and x["close"] > 0
+def prev_valid(px, d):   # 回傳 (前一有效收盤, 相隔市場交易日數)
+    i = CPOS[d] - 1
+    while i >= 0:
+        x = px.get(CAL[i])
+        if valid(x): return x["close"], CPOS[d] - i
+        i -= 1
+    return None, 0
 def prev_close(px, d):
     i = CPOS[d] - 1
     while i >= 0:
@@ -79,8 +94,9 @@ def build(evs, tag):
             for k in range(k0 + 1, CPOS[act] + 1):
                 d = CAL[k]; x = px.get(d)
                 if not valid(x) or d in dv: continue
-                pc = prev_close(px, d)
-                if pc and (abs(x["open"] / pc - 1) > limit(d) + 0.015 or abs(x["close"] / pc - 1) > limit(d) + 0.015):
+                pc, n = prev_valid(px, d)   # 中間無成交日時，容許 n 日累積漲跌停幅度
+                up = (1 + limit(d)) ** n - 1 + 0.015; dn = 1 - (1 - limit(d)) ** n + 0.015
+                if pc and any(v / pc - 1 > up or 1 - v / pc > dn for v in (x["open"], x["close"])):
                     jump = (d, pc, x["open"], x["close"]); break
             if jump:
                 base["H"][H] = {"status": f"未解決：{jump[0]} 跳價（前收 {jump[1]} → 開 {jump[2]}／收 {jump[3]}）疑似公司行動未核對", "sched": sched}; continue
@@ -157,10 +173,10 @@ for kind in ("做多", "做多超額(減大盤)"):
         if s: s.update(樣本="全期", 層="觀察組", 子樣本="理論價格（全部完成）"); rows.append(s)
 cols = ["樣本", "層", "組", "子樣本", "口徑", "持有H", "樣本數", "平均報酬", "平均持有交易日數", "單利年化", "勝率", "賠率R", "凱利", "半凱利", "標準差", "t值", "雙尾p",
         "聚合單位", "聚合單位數", "單位最大筆數", "聚合t", "聚合p", "Holm_聚合p", "中位數", "第5百分位", "最小值", "最大值", "N/A原因", "bt_stats版本"]
-w = csv.writer(open("out/025_回測結果_參數全表_V01_R02.csv", "w", encoding="utf-8-sig", newline="")); w.writerow(cols)
+w = csv.writer(open("out/025_回測結果_參數全表_V01_R03.csv", "w", encoding="utf-8-sig", newline="")); w.writerow(cols)
 for s in rows: w.writerow(["" if s.get(c) is None else s.get(c) for c in cols])
 # 年度與個股分布（全期、做多、H10／H20，理論價格）
-w = csv.writer(open("out/025_分布_年度個股_V01_R02.csv", "w", encoding="utf-8-sig", newline=""))
+w = csv.writer(open("out/025_分布_年度個股_V01_R03.csv", "w", encoding="utf-8-sig", newline=""))
 w.writerow(["分類", "鍵", "持有H", "樣本數", "平均報酬", "中位數", "合計報酬貢獻"])
 for H in (10, 20):
     for kname, kf in (("年度", lambda t: t["r"]["發言日期"][:4]), ("個股", lambda t: f'{t["r"]["公司代號"]} {t["r"]["公司名稱"]}')):
@@ -169,7 +185,7 @@ for H in (10, 20):
             if done(t, H): g[kf(t)].append(t["H"][H]["ret"])
         for k, v in sorted(g.items()): w.writerow([kname, k, H, len(v), sum(v) / len(v), median(v), sum(v)])
 # 原始數據明細（一列一筆：事件 × 持有期）
-dw = csv.writer(open("out/025_原始數據明細_V01_R02.csv", "w", encoding="utf-8-sig", newline=""))
+dw = csv.writer(open("out/025_原始數據明細_V01_R03.csv", "w", encoding="utf-8-sig", newline=""))
 dw.writerow(["交易編號", "持有H", "事件ID", "公司代號", "公司名稱", "公告日", "公告時間", "進場日E", "進場價(開盤)", "預定出場日", "實際出場日", "出場價(收盤)",
              "實際持有市場交易日數", "除權息調整因子", "報酬(小數)", "大盤同期報酬", "超額報酬", "聚合單位標籤(進場日)", "樣本內外", "合約類型", "終止時點", "發動方",
              "進場一字鎖板", "出場一字鎖板", "七窗口皆完成", "狀態／排除原因"])
