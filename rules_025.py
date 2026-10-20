@@ -4,11 +4,12 @@
 # 本檔是「規則」；無法用規則處理的個案，以 overrides_025.csv 逐筆覆寫並記錄理由（見 run_025.py）。
 import re
 
-RULE_VERSION = "R1"
+RULE_VERSION = "R1.1"   # R1.1(2026-10-20 Ed)：股務代理改為排除
 
 def norm(s):
     """主旨常被換行切斷字詞（如「股\n權」），一律去除空白與換行再比對"""
-    return re.sub(r"\s+", "", s or "")
+    import unicodedata
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", s or ""))   # R1.1：NFKC 統一異體字(如康熙部首「⼟」→「土」)
 
 # ───────── 第一階段：候選（找可能的終止類公告）─────────
 TERM = re.compile(r"終止|解除|不續約|不再續約|不予續約|提前結束|提前終止|屆期不續|返還")
@@ -106,7 +107,8 @@ def classify(subj, body, h15="", h16=""):
         return _timing(out, subj, body)
     if TERM.search(subj) and OBJ.search(subj):
         if TRANSFER_AGENT.search(subj):
-            out.update(判讀="符合", 類別="股務代理業務(服務契約)", 合約類型="商業合約", 規則備註="服務契約，單獨標記；是否保留於主樣本由後續決定")
+            out.update(判讀="排除", 類別="股務代理業務(服務契約)", 規則備註="Ed 2026-10-20：股務代理為公司付費的行政服務契約，不影響營收，不納入")
+            return out
         elif eng:
             out.update(判讀="符合-工程", 類別="工程合約(發包方)", 合約類型="工程")
         elif LICENSE.search(subj) and re.search(r"經銷|代理|供貨|採購|銷售|訂單", subj):

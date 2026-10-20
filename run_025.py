@@ -34,21 +34,25 @@ for f in sorted(glob.glob("merged/MOPS每日重大訊息_公告總表_20*.csv.gz
             if o["覆寫合約類型"]: r["合約類型"] = o["覆寫合約類型"]
             r["規則備註"] = o["理由"]; r["判讀來源"] = "人工覆寫"
         rows.append(r)
-rows.sort(key=lambda r: (r["公司代號"], r["發言日期"], r["發言時間"]))
+rows.sort(key=lambda r: (r["公司代號"], r["發言日期"], int(r["發言時間"] or 0)))   # 時間未補零，須轉整數排序
 # 事件ID：同公司，補充/更正/變更字樣，或 60 日內主旨相同 → 沿用首次公告ID
 SUP = re.compile(r"補充|更正|再次|變更")
-first = {}; last_seen = {}
+first = {}; last_seen = {}; last_any = {}
 def d(s): return datetime.strptime(s, "%Y%m%d")
 for r in rows:
     if not r["判讀"].startswith("符合") or r["上市櫃狀態"] != "上市櫃期間": r["事件ID"] = ""; r["是否首次"] = ""; continue
     key = r["公司代號"]; ns = norm(r["主旨"]); ns2 = SUP.sub("", ns)
     eid = f'{r["公司代號"]}_{r["發言日期"]}_{r["發言時間"]}'
     prev = last_seen.get((key, ns2))
-    if prev and (d(r["發言日期"]) - d(prev[1])).days <= 60:
-        eid = prev[0]; r["規則備註"] = (r["規則備註"] + "；" if r["規則備註"] else "") + "後續補充，沿用首次事件ID"; r["是否首次"] = "否"
+    if not (prev and (d(r["發言日期"]) - d(prev[1])).days <= 60):
+        near = last_any.get(key)   # 同公司 5 日內另一則終止公告（母子公司同時公告、同案拆多則）視為同一事件
+        prev = near if (near and (d(r["發言日期"]) - d(near[1])).days <= 5) else None
+    if prev:
+        eid = prev[0]; r["規則備註"] = (r["規則備註"] + "；" if r["規則備註"] else "") + "後續補充或同案，沿用首次事件ID"; r["是否首次"] = "否"
     else:
         r["是否首次"] = "是"
     last_seen[(key, ns2)] = (eid, r["發言日期"]); r["事件ID"] = eid
+    if r["是否首次"] == "是": last_any[key] = (eid, r["發言日期"])
 cols = ["事件ID","是否首次","公司代號","公司名稱","市場別","上市櫃狀態","發言日期","發言時間","主旨","判讀","類別","合約類型","終止時點","公司角色","規則備註","判讀來源"]
 hdr = rows[0].keys()
 w = csv.writer(open(f"{src}/025_全候選判讀.csv", "w", encoding="utf-8-sig", newline=""))
