@@ -53,7 +53,15 @@ for r in rows:
         r["是否首次"] = "是"
     last_seen[(key, ns2)] = (eid, r["發言日期"]); r["事件ID"] = eid
     if r["是否首次"] == "是": last_any[key] = (eid, r["發言日期"])
-cols = ["事件ID","是否首次","公司代號","公司名稱","市場別","上市櫃狀態","發言日期","發言時間","主旨","判讀","類別","合約類型","終止時點","公司角色","規則備註","判讀來源"]
+# 發動方（2026-10-20 回測前預先登記的分層變數；依首次公告主旨＋說明前600字）
+def initiator(r):
+    t = norm(r["主旨"]) + norm(r.get("說明", ""))[:600]
+    if re.search(r"接獲.{0,20}通知|來函|片面終止|書面通知於|收受", t): return "對方發動"
+    if re.search(r"合意|雙方同意|協議終止|共同同意|相互終止", t): return "雙方合意"
+    if re.search(r"本公司.{0,10}(決議|決定|終止|解除|提出)|董事會.{0,6}(決議|通過)", t): return "公司主動"
+    return "不明"
+for r in rows: r["發動方"] = initiator(r) if r.get("事件ID") else ""
+cols = ["事件ID","是否首次","公司代號","公司名稱","市場別","上市櫃狀態","發言日期","發言時間","主旨","判讀","類別","合約類型","終止時點","公司角色","發動方","規則備註","判讀來源"]
 hdr = rows[0].keys()
 w = csv.writer(open(f"{src}/025_全候選判讀.csv", "w", encoding="utf-8-sig", newline=""))
 hdr = list(dict.fromkeys(list(hdr) + ["事件ID","是否首次"]))
