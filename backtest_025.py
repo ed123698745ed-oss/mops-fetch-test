@@ -21,6 +21,7 @@ def tcdf(t, df):  # 雙尾 p：Student t（以不完全 beta 函數）
     a, b = df / 2, 0.5
     bt = math.exp(math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log(1 - x))
     return bt * betacf(a, b, x) / a if x < (a + 1) / (a + b + 2) else 1 - bt * betacf(b, a, 1 - x) / b
+SKIPLIST = []
 def trades(evs):
     out, skipped = [], collections.Counter()
     cache = {}
@@ -33,13 +34,13 @@ def trades(evs):
         px, dv = cache[sid]
         ad = dt.datetime.strptime(r["發言日期"], "%Y%m%d").strftime("%Y-%m-%d")
         i = next((k for k, x in enumerate(px) if x["date"] > ad), None)
-        if i is None: skipped["無公告後股價"] += 1; continue
+        if i is None: skipped["無公告後股價"] += 1; SKIPLIST.append((r, "FinMind 無公告日後股價資料")); continue
         en = px[i]
         if en["Trading_Volume"] <= 0 or en["open"] <= 0: skipped["進場日無成交"] += 1; continue
         if (en["date"] > (dt.datetime.strptime(ad, "%Y-%m-%d") + dt.timedelta(days=20)).strftime("%Y-%m-%d")): skipped["公告後20日內無交易(停牌)"] += 1; continue
         anomaly = not (en["min"] <= en["open"] <= en["max"])
         idx = IDX["TPEx" if r["市場別"] == "otc" else "TAIEX"]
-        res = {"r": r, "entry": en["date"], "anom": anomaly}
+        res = {"r": r, "entry": en["date"], "anom": anomaly, "open": en["open"]}
         for H in HS:
             j = i + H - 1
             if j >= len(px): continue
@@ -49,22 +50,14 @@ def trades(evs):
             g = ex["close"] * f / en["open"] - 1
             ia, ib = idx.get(en["date"]), idx.get(ex["date"])
             mk = (ib["close"] / ia["open"] - 1) if ia and ib else None
-            res[H] = (g, mk)
+            res[H] = (g, mk, ex["date"], ex["close"], f)
         out.append(res)
     return out, skipped
+from bt_stats import summarize   # 共用統計函式 bt_stats 1.0（Drive 原檔，selftest 通過）
 def stats(xs, dates, H):
-    n = len(xs)
-    if n < 2: return None
-    m = mean(xs); sd = stdev(xs); w = [x for x in xs if x > 0]; l = [x for x in xs if x <= 0]
-    p = len(w) / n; R = (mean(w) / abs(mean(l))) if w and l and mean(l) != 0 else float("nan")
-    kelly = p - (1 - p) / R if R == R and R > 0 else float("nan")
-    g = collections.defaultdict(list)
-    for x, d in zip(xs, dates): g[d].append(x)
-    cm = [mean(v) for v in g.values()]
-    if len(cm) > 1 and stdev(cm) > 0:
-        t = mean(cm) / (stdev(cm) / math.sqrt(len(cm))); pv = tcdf(abs(t), len(cm) - 1)
-    else: t, pv = float("nan"), float("nan")
-    return dict(N=n, 群數=len(cm), 平均=m, 持有=H, 年化=m * 252 / H, 勝率=p, R=R, 凱利=kelly, 標準差=sd, t=t, p=pv)
+    if len(xs) < 2: return None
+    o = summarize(xs, hold_days=[H] * len(xs), cluster=dates, cluster_unit="進場日")
+    return dict(o)
 def holm(ps):
     idx = sorted(range(len(ps)), key=lambda i: ps[i] if ps[i] == ps[i] else 9); adj = [float("nan")] * len(ps); run = 0; k = len([p for p in ps if p == p])
     for rank, i in enumerate(idx):
@@ -78,12 +71,12 @@ def table(ts, label, kind="net"):
         xs, ds = [], []
         for t_ in ts:
             if H not in t_: continue
-            g, mk = t_[H]
-            x = {"gross": g, "net": g - COST, "excess": (g - mk) if mk is not None else None, "short": -g - COST}[kind]
+            g, mk = t_[H][0], t_[H][1]
+            x = {"gross": g, "excess": (g - mk) if mk is not None else None, "short": -g}[kind]   # 手冊第6節：成本試算非必填，正式結果不扣成本
             if x is None: continue
             xs.append(x); ds.append(t_["entry"])
         s = stats(xs, ds, H)
-        if s: s["組"] = label; s["口徑"] = kind; rows.append(s)
+        if s: s["組"] = label; s["口徑"] = {"gross": "做多", "short": "放空(做多取負)", "excess": "做多超額(減大盤)"}[kind]; s["持有H"] = H; rows.append(s)
     return rows
 def layer(ts, key):
     g = collections.defaultdict(list)
@@ -97,15 +90,15 @@ for sample, ts in [("全期", T), ("樣本內", IS), ("樣本外", OOS)]:
     for lname, key in LAYERS:
         fam = []
         for gname, gts in sorted(layer(ts, key).items()):
-            for kind in ("gross", "net", "excess", "short"):
+            for kind in ("gross", "short", "excess"):
                 for s in table(gts, gname, kind): s["樣本"] = sample; s["層"] = lname; fam.append(s)
-        for kind in ("net", "short"):
-            sub = [s for s in fam if s["口徑"] == kind and not (lname != "全體" and s["組"] == "不明")]
-            for s, a in zip(sub, holm([s["p"] for s in sub])): s["Holm_p"] = a
+        for kind in ("gross", "short"):
+            sub = [s for s in fam if s["口徑"] == {"gross": "做多", "short": "放空(做多取負)"}[kind] and not (lname != "全體" and s["組"] == "不明")]
+            for s, a in zip(sub, holm([s["聚合p"] if s["聚合p"] is not None else float("nan") for s in sub])): s["Holm_聚合p"] = a
         allrows += fam
-for kind in ("gross", "net", "excess"):
+for kind in ("gross", "excess"):
     for s in table(TO, "遠雄觀察組", kind): s["樣本"] = "全期"; s["層"] = "觀察組"; allrows.append(s)
-cols = ["樣本", "層", "組", "口徑", "持有", "N", "群數", "平均", "年化", "勝率", "R", "凱利", "標準差", "t", "p", "Holm_p"]
+cols = ["樣本", "層", "組", "口徑", "持有H", "樣本數", "平均報酬", "平均持有交易日數", "單利年化", "勝率", "賠率R", "凱利", "半凱利", "標準差", "t值", "雙尾p", "聚合單位", "聚合單位數", "單位最大筆數", "聚合t", "聚合p", "Holm_聚合p", "N/A原因", "bt_stats版本"]
 w = csv.writer(open("out/025_回測結果_R01.csv", "w", encoding="utf-8-sig", newline="")); w.writerow(cols)
 for s in allrows: w.writerow([s.get(c, "") if not isinstance(s.get(c), float) else round(s[c], 6) for c in cols])
 tw = csv.writer(open("out/025_交易明細_R01.csv", "w", encoding="utf-8-sig", newline=""))
@@ -113,3 +106,22 @@ tw.writerow(["事件ID", "公司代號", "公司名稱", "公告日", "進場日
 for t_ in T + TO:
     r = t_["r"]; tw.writerow([r["事件ID"], r["公司代號"], r["公司名稱"], r["發言日期"], t_["entry"], int(t_["anom"])] + [round(t_[H][0], 6) if H in t_ else "" for H in HS] + [round(t_[H][1], 6) if H in t_ and t_[H][1] is not None else "" for H in HS] + [r["類別"], r["終止時點"], r["發動方"]])
 print("事件", len(E), "可交易", len(T), "剔除", dict(SK), "開盤異常", sum(t["anom"] for t in T), "樣本內", len(IS), "樣本外", len(OOS))
+
+# 原始數據明細（長格式：一列一筆交易＝事件×持有期）
+def ctype2(r): return ctype(r) if r in E else "觀察組(遠雄)"
+dw = csv.writer(open("out/025_原始數據明細_V01_R01.csv", "w", encoding="utf-8-sig", newline=""))
+dw.writerow(["交易編號", "參數組(持有H)", "事件ID", "公司代號", "公司名稱", "市場別(現況)", "公告日", "公告時間", "進場日", "進場價(開盤)", "出場日", "出場價(收盤)",
+             "除權息調整因子", "報酬(小數)", "大盤同期報酬", "超額報酬", "持有交易日數", "聚合單位標籤(進場日)", "樣本內外", "合約類型", "終止時點", "發動方", "開盤異常", "排除原因"])
+k = 0
+for t_ in T + TO:
+    r = t_["r"]; grp = "觀察組(遠雄)" if t_ in TO else ("樣本內" if r["發言日期"] <= "20210630" else ("樣本外" if r["發言日期"] >= "20210901" else "緩衝期"))
+    for H in HS:
+        k += 1
+        if H not in t_:
+            dw.writerow([f"T{k:05d}", H, r["事件ID"], r["公司代號"], r["公司名稱"], r["市場別"], r["發言日期"], r["發言時間"], t_["entry"], t_["open"], "", "", "", "", "", "", "", t_["entry"], grp, r["類別"], r["終止時點"], r["發動方"], int(t_["anom"]), "持有期超出資料終點(下市或資料截止)"]); continue
+        g, mk, xd, xc, f = t_[H]
+        dw.writerow([f"T{k:05d}", H, r["事件ID"], r["公司代號"], r["公司名稱"], r["市場別"], r["發言日期"], r["發言時間"], t_["entry"], t_["open"], xd, xc, round(f, 6), round(g, 6),
+                     "" if mk is None else round(mk, 6), "" if mk is None else round(g - mk, 6), H, t_["entry"], grp, r["類別"], r["終止時點"], r["發動方"], int(t_["anom"]), ""])
+for r, why in SKIPLIST:
+    k += 1; dw.writerow([f"T{k:05d}", "全部", r["事件ID"], r["公司代號"], r["公司名稱"], r["市場別"], r["發言日期"], r["發言時間"]] + [""] * 15 + [why])
+print("明細列數", k)
