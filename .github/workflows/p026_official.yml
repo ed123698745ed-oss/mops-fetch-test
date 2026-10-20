@@ -1,0 +1,17 @@
+name: p026 official daily quotes
+on:
+  push:
+    branches: [p026-official]
+    paths: [p026/official_need.txt, p026/fetch_official.py, .github/workflows/p026_official.yml]
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python p026/fetch_official.py p026/official_need.txt
+      - run: |
+          git config user.name "p026-bot"; git config user.email "p026-bot@users.noreply.github.com"
+          git add out/p026_official && git commit -m "p026 official daily quotes [skip ci]" && git push || echo nothing
