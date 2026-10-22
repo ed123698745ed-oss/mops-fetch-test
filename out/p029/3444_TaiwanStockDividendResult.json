@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2023-07-24", "stock_id": "3444", "before_price": 87.7, "after_price": 83.9, "stock_and_cache_dividend": 3.8, "stock_or_cache_dividend": "除息", "max_price": 92.2, "min_price": 75.6, "open_price": 83.9, "reference_price": 83.9}]}
