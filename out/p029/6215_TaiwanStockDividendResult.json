@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2019-07-01", "stock_id": "6215", "before_price": 16.8, "after_price": 16.3, "stock_and_cache_dividend": 0.5, "stock_or_cache_dividend": "息", "max_price": 17.9, "min_price": 14.7, "open_price": 16.3, "reference_price": 16.3}]}
