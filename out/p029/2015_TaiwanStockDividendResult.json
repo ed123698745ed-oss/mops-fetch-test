@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2012-07-16", "stock_id": "2015", "before_price": 50.0, "after_price": 47.0, "stock_and_cache_dividend": 3.0, "stock_or_cache_dividend": "息", "max_price": 50.2, "min_price": 43.75, "open_price": 47.0, "reference_price": 47.0}]}
