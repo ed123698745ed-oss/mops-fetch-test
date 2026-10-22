@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2021-01-12", "stock_id": "4726", "before_price": 30.5, "after_price": 30.5, "stock_and_cache_dividend": 0.0, "stock_or_cache_dividend": "除權", "max_price": 33.55, "min_price": 27.45, "open_price": 30.5, "reference_price": 30.5}]}
