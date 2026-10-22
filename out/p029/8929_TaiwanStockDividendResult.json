@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2017-07-31", "stock_id": "8929", "before_price": 70.0, "after_price": 59.05, "stock_and_cache_dividend": 10.95, "stock_or_cache_dividend": "除權息", "max_price": 64.9, "min_price": 53.2, "open_price": 59.1, "reference_price": 59.05}]}
