@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2022-08-03", "stock_id": "4933", "before_price": 36.8, "after_price": 33.48, "stock_and_cache_dividend": 3.317444, "stock_or_cache_dividend": "除息", "max_price": 36.8, "min_price": 30.15, "open_price": 33.5, "reference_price": 33.48}]}
