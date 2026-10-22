@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2018-06-27", "stock_id": "5536", "before_price": 241.0, "after_price": 198.26, "stock_and_cache_dividend": 42.740002, "stock_or_cache_dividend": "除權息", "max_price": 218.0, "min_price": 178.5, "open_price": 198.5, "reference_price": 198.26}]}
