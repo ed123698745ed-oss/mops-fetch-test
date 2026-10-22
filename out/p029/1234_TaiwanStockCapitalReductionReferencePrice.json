@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2013-11-12", "stock_id": "1234", "ClosingPriceonTheLastTradingDay": 33.7, "PostReductionReferencePrice": 41.59, "LimitUp": 44.5, "LimitDown": 38.7, "OpeningReferencePrice": 41.6, "ExrightReferencePrice": -1.0, "ReasonforCapitalReduction": "Cash refund"}]}
