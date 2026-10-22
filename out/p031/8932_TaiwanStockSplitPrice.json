@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2024-09-09", "stock_id": "8932", "type": "面額變更", "before_price": 169.5, "after_price": 84.75, "max_price": 93.2, "min_price": 76.3, "open_price": 84.8}, {"date": "2026-03-09", "stock_id": "8932", "type": "面額變更", "before_price": 199.5, "after_price": 99.75, "max_price": 109.5, "min_price": 89.8, "open_price": 99.8}]}
