@@ -1,6 +1,6 @@
 # 029 資產處分策略：FinMind 日K、公司行動、已發行股數、匯率抓取（GitHub Actions 執行，匿名額度）
 # 用法：python p029/fetch.py <slice_index> <slice_count>；輸出 out/p029/
-import json, os, sys, time, urllib.request, urllib.parse, csv, gzip
+import json, os, sys, time, urllib.request, urllib.parse, urllib.error, csv, gzip
 API = "https://api.finmindtrade.com/api/v4/data"
 OUT = "out/p029"; os.makedirs(OUT, exist_ok=True); LOG = None
 END = "2026-10-21"
@@ -11,6 +11,9 @@ def get(params, path, keep=None):
     for attempt in range(40):
         try:
             with urllib.request.urlopen(url, timeout=90) as r: d = json.load(r)
+        except urllib.error.HTTPError as e:   # 400／402 等：讀回應內容，交由下方判斷（不重試 400）
+            try: d = json.loads(e.read().decode("utf-8", "ignore"))
+            except Exception: d = {"status": e.code, "msg": str(e)}
         except Exception as e:
             print("ERR", params, e, flush=True); time.sleep(20); continue
         if d.get("status") == 200:
@@ -23,7 +26,7 @@ def get(params, path, keep=None):
             return
         msg = str(d.get("msg", ""))
         LOG.write(f"{time.strftime('%H:%M:%S')} WAIT {params.get('dataset')} {params.get('data_id')} {msg[:80]}\n"); LOG.flush()
-        if "upper limit" in msg: time.sleep(90)
+        if "upper limit" in msg or d.get("status") == 402: time.sleep(90)
         else: json.dump(d, open(path + ".err", "w", encoding="utf-8"), ensure_ascii=False); return
     print("GIVEUP", params, flush=True)
 def checkpoint(i):
@@ -36,6 +39,7 @@ def main():
     rows = [l.strip().split(",") for l in open("codes_029.txt") if l.strip()]
     mine = rows[i::n]
     if i == 0:
+        get({"dataset": "TaiwanStockParValueChange", "start_date": "2009-12-01", "end_date": END}, f"{OUT}/_ParValueChange_all.json")
         for idx in ("TAIEX", "TPEx"):
             get({"dataset": "TaiwanStockPrice", "data_id": idx, "start_date": "2009-12-01", "end_date": END}, f"{OUT}/_{idx}_Price.csv.gz")
     if i == 1:
@@ -44,7 +48,7 @@ def main():
                 keep=["date", "currency", "cash_buy", "cash_sell", "spot_buy", "spot_sell"]); time.sleep(1)
     n_ok = 0
     for c, s, e, sh in mine:
-        for ds in ("TaiwanStockPrice", "TaiwanStockDividendResult", "TaiwanStockCapitalReductionReferencePrice", "TaiwanStockSplitPrice", "TaiwanStockParValueChange"):
+        for ds in ("TaiwanStockPrice", "TaiwanStockDividendResult", "TaiwanStockCapitalReductionReferencePrice", "TaiwanStockSplitPrice"):
             ext = "csv.gz" if ds == "TaiwanStockPrice" else "json"
             get({"dataset": ds, "data_id": c, "start_date": s, "end_date": e}, f"{OUT}/{c}_{ds}.{ext}"); time.sleep(0.5)
         if sh == "1":
