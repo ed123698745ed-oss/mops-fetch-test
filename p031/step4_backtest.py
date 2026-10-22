@@ -95,11 +95,28 @@ def pool(sid, Ed, px):
     if ok < 5: return "排除：期間表無此代號且 E 前有效交易日不足（推定非上市櫃）", ""
     last = max((d for d, x in px.items() if valid(x)), default="")
     return "", ("" if last >= CAL[-30] else last.replace("-", ""))
+# 價格資料涵蓋：031 抓取者為全期（2009-12～2026-10）；沿用 029 已抓資料者，僅在 029 抓取區間涵蓋 [E−45 日, E+75 日] 時使用（RANGES 檔：代號,起,迄）
+RANGES = {}
+if len(sys.argv) > 4:
+    for l in open(sys.argv[4]):
+        c, s0, e0 = l.strip().split(",")[:3]; RANGES[c] = (s0, e0)
+import datetime as _dt
+def covered(sid, Ed):
+    if sid not in RANGES: return True
+    s0, e0 = RANGES[sid]
+    lo = (_dt.date.fromisoformat(Ed) - _dt.timedelta(days=45)).isoformat(); hi = min((_dt.date.fromisoformat(Ed) + _dt.timedelta(days=75)).isoformat(), CAL[-1])
+    return s0 <= lo and e0 >= hi
+def have(sid): return all(os.path.exists(f"{DATA}/{sid}_{ds}") for ds in ("TaiwanStockPrice.csv.gz", "TaiwanStockDividendResult.json", "TaiwanStockCapitalReductionReferencePrice.json"))
 EV = pd.read_csv(EVF, dtype=str, keep_default_na=False)
 T = []
 for _, r in EV.iterrows():
     sid = r["公司代號"]; Ed = r["E"]; t = {"r": r.to_dict(), "E": Ed, "H": {}}
     if not Ed or Ed not in CPOS: t["excl"] = "E 不在市場日曆／資料終點後"; T.append(t); continue
+    if r["股票池"] in ("未上市櫃(興櫃/公開發行)", "已終止上市櫃"): t["excl"] = "排除：" + r["股票池"]; T.append(t); continue
+    if r["股票池"] == "期間表無此代號":
+        if r["路線"] not in ("A", "B"): t["excl"] = "排除：期間表無此代號（比較組未逐一驗證，多為興櫃／公開發行）"; T.append(t); continue
+        if not os.path.exists(f"{DATA}/{sid}_TaiwanStockPrice.csv.gz") or not stock(sid)[0]: t["excl"] = "排除：期間表無此代號且 FinMind 無該股日K（非上市櫃）"; T.append(t); continue
+    if not have(sid) or not covered(sid, Ed): t["excl"] = "未取得價格資料（FinMind 額度限制，尚未抓到）"; T.append(t); continue
     px, dv = stock(sid)
     why, end = pool(sid, Ed, px)
     t["推定上市櫃"] = sid not in PER
