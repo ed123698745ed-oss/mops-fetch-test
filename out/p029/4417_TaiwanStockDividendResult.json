@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2020-07-13", "stock_id": "4417", "before_price": 32.85, "after_price": 30.85, "stock_and_cache_dividend": 2.0, "stock_or_cache_dividend": "除息", "max_price": 33.9, "min_price": 27.8, "open_price": 30.85, "reference_price": 30.85}]}
