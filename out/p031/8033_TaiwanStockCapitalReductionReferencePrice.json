@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2017-09-28", "stock_id": "8033", "ClosingPriceonTheLastTradingDay": 10.25, "PostReductionReferencePrice": 12.05, "LimitUp": 13.25, "LimitDown": 10.85, "OpeningReferencePrice": 12.05, "ExrightReferencePrice": -1.0, "ReasonforCapitalReduction": "Making up losses"}]}
