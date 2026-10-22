@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2012-10-25", "stock_id": "6211", "before_price": 26.0, "after_price": 20.99, "stock_and_cache_dividend": 5.01, "stock_or_cache_dividend": "除息", "max_price": 22.45, "min_price": 19.55, "open_price": 21.0, "reference_price": 20.99}]}
