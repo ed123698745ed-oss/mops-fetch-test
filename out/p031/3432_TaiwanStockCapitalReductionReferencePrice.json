@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2024-01-22", "stock_id": "3432", "ClosingPriceonTheLastTradingDay": 10.65, "PostReductionReferencePrice": 19.69, "LimitUp": 21.65, "LimitDown": 17.75, "OpeningReferencePrice": 19.7, "ExrightReferencePrice": -1.0, "ReasonforCapitalReduction": "Making up losses"}]}
