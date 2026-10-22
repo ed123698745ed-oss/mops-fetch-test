@@ -26,7 +26,7 @@ def get(params, path, keep=None):
             return
         msg = str(d.get("msg", ""))
         LOG.write(f"{time.strftime('%H:%M:%S')} WAIT {params.get('dataset')} {params.get('data_id')} {msg[:80]}\n"); LOG.flush()
-        if "upper limit" in msg or d.get("status") == 402: time.sleep(90)
+        if "upper limit" in msg or d.get("status") == 402: time.sleep(300)
         else: json.dump(d, open(path + ".err", "w", encoding="utf-8"), ensure_ascii=False); return
     print("GIVEUP", params, flush=True)
 def checkpoint(i):
@@ -40,14 +40,15 @@ def main():
     mine = rows[i::n]
     if i == 0:
         get({"dataset": "TaiwanStockParValueChange", "start_date": "2009-12-01", "end_date": END}, f"{OUT}/_ParValueChange_all.json")
+        get({"dataset": "TaiwanStockSplitPrice", "start_date": "2009-12-01", "end_date": END}, f"{OUT}/_SplitPrice_all.json")
         for idx in ("TAIEX", "TPEx"):
             get({"dataset": "TaiwanStockPrice", "data_id": idx, "start_date": "2009-12-01", "end_date": END}, f"{OUT}/_{idx}_Price.csv.gz")
     n_ok = 0
     for c in mine:
         s, e = START, END
-        for ds in ("TaiwanStockPrice", "TaiwanStockDividendResult", "TaiwanStockCapitalReductionReferencePrice", "TaiwanStockSplitPrice"):
+        for ds in ("TaiwanStockPrice", "TaiwanStockDividendResult", "TaiwanStockCapitalReductionReferencePrice"):
             ext = "csv.gz" if ds == "TaiwanStockPrice" else "json"
-            get({"dataset": ds, "data_id": c, "start_date": s, "end_date": e}, f"{OUT}/{c}_{ds}.{ext}"); time.sleep(0.5)
+            get({"dataset": ds, "data_id": c, "start_date": s, "end_date": e}, f"{OUT}/{c}_{ds}.{ext}"); time.sleep(12)   # 匿名額度約每 IP 每小時 300 次，逐筆節流
         n_ok += 1
         LOG.write(f"{time.strftime('%H:%M:%S')} OK {c}\n"); LOG.flush()
         if n_ok % 5 == 0: checkpoint(i)
