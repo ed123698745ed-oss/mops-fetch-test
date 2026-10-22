@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2020-10-16", "stock_id": "2504", "ClosingPriceonTheLastTradingDay": 22.85, "PostReductionReferencePrice": 25.01, "LimitUp": 27.5, "LimitDown": 22.55, "OpeningReferencePrice": 25.0, "ExrightReferencePrice": -1.0, "ReasonforCapitalReduction": "Cash refund"}]}
