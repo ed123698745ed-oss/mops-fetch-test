@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2021-04-22", "stock_id": "8112", "before_price": 48.5, "after_price": 43.92, "stock_and_cache_dividend": 4.575276, "stock_or_cache_dividend": "權息", "max_price": 50.0, "min_price": 39.55, "open_price": 45.5, "reference_price": 45.5}]}
