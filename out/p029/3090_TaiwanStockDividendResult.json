@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2022-07-04", "stock_id": "3090", "before_price": 48.6, "after_price": 44.6, "stock_and_cache_dividend": 4.0, "stock_or_cache_dividend": "息", "max_price": 49.05, "min_price": 40.15, "open_price": 44.6, "reference_price": 44.6}]}
