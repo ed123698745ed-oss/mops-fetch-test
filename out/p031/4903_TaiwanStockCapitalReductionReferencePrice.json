@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2022-12-30", "stock_id": "4903", "ClosingPriceonTheLastTradingDay": 10.0, "PostReductionReferencePrice": 14.52, "LimitUp": 15.95, "LimitDown": 13.1, "OpeningReferencePrice": 14.5, "ExrightReferencePrice": 0.0, "ReasonforCapitalReduction": "彌補虧損"}]}
