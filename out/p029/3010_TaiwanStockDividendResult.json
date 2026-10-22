@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2021-09-02", "stock_id": "3010", "before_price": 89.3, "after_price": 83.23, "stock_and_cache_dividend": 6.064706, "stock_or_cache_dividend": "權息", "max_price": 91.5, "min_price": 75.0, "open_price": 83.2, "reference_price": 83.23}]}
