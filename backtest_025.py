@@ -1,3 +1,11 @@
+# 策略025 回測 R04（2026-10-23，Ed 指示「開始進行」；Eve 2026-10-21 對 R03 複審退回：價格比例還原等於把現金以參考價再投資，與策略卡第11、13節不符）
+# R04 相對 R03：公司行動改為「固定持股數＋現金／應收權利」逐筆計算，不再使用 before_price/after_price 連乘因子。
+#   報酬＝(出場收盤 × 持股倍數 ＋ 持有期間現金權利合計) ÷ 進場開盤價 − 1（多方，進場本金為分母）；放空＝其負值（應負擔股利／配股，初始賣出名目本金為分母）。
+#   現金股利／退還現金：入帳於除息（恢復買賣）日，名目金額，不再投資、不折現。配股：持股倍數×(1＋配股率)；減資換股：持股倍數×換發比率。
+#   資料：純現金股利＝FinMind TaiwanStockDividendResult 實際「息／除息」欄位 stock_and_cache_dividend；權息混合＝FinMind TaiwanStockDividend 的
+#   盈餘配股（面額10元）與盈餘現金股利，並以除權息前價格驗算參考價；陞泰減資＝corporate_actions_025.csv（MOPS 公告）。
+#   現金增資認購權（除權但無股票／現金股利）無處置資料 → 列「未解決」，不推估、不納入統計，狀態欄列價格報酬與權值上下界供參考。
+# 以下為 R03 說明（保留）：
 # 策略025 回測 R03（2026-10-21，Ed 00:54 指示「好修正R03」；R02 為 2026-10-20 依 Eve V01/R01 審查退回意見修正；口徑依策略卡 V01 第 9～14 節）
 # R03 相對 R02：
 #  a. 跳價檢查改為「與前一有效收盤相隔 n 個市場交易日時，容許 n 日累積漲跌停幅度＋1.5 個百分點」。R02 用單日限制，
@@ -33,9 +41,24 @@ CACHE = {}
 def stock(sid):
     if sid not in CACHE:
         px = {x["date"]: x for x in load(sid)}
-        dv = {x["date"]: x["before_price"] / x["after_price"] for x in load(sid, "TaiwanStockDividendResult") if x.get("after_price")}
-        for c in CA.get(sid, []): dv[c["恢復買賣日"]] = dv.get(c["恢復買賣日"], 1.0) * float(c["停止買賣前收盤"]) / float(c["恢復買賣參考價"])
-        CACHE[sid] = (px, dv)
+        div = load(sid, "TaiwanStockDividend")
+        ev = {}
+        for x in load(sid, "TaiwanStockDividendResult"):
+            d, typ, val = x["date"], x["stock_or_cache_dividend"], x["stock_and_cache_dividend"]
+            if typ in ("息", "除息"):
+                ev[d] = dict(m=1.0, c=val, note=f"現金股利{val}元（FinMind 除息結果）")
+                continue
+            rows = [y for y in div if d in (y["StockExDividendTradingDate"], y["CashExDividendTradingDate"])]
+            if len(rows) != 1: ev[d] = dict(bad=f"{typ}：無法對應唯一股利政策（{len(rows)}筆），無法拆分現金與配股", val=val, bef=x["before_price"], aft=x["after_price"]); continue
+            y = rows[0]; st = (y["StockEarningsDistribution"] + y["StockStatutorySurplus"]) / 10.0; ca = y["CashEarningsDistribution"] + y["CashStatutorySurplus"]
+            if y["CashIncreaseSubscriptionRate"] > 0:
+                ev[d] = dict(bad=f"{typ}：現金增資認購權（每千股{y['CashIncreaseSubscriptionRate']:.4g}股、認購價{y['CashIncreaseSubscriptionpRrice']}），權利處置無資料", val=val, bef=x["before_price"], aft=x["after_price"], st=st, ca=ca); continue
+            if abs((x["before_price"] - ca) / (1 + st) - x["after_price"]) > 0.05:
+                ev[d] = dict(bad=f"{typ}：股利政策與參考價不符，無法核對", val=val, bef=x["before_price"], aft=x["after_price"]); continue
+            ev[d] = dict(m=1 + st, c=ca, note=f"現金股利{ca}元＋配股{st:.4g}股／股（FinMind TaiwanStockDividend；參考價驗算）")
+        for c in CA.get(sid, []):
+            d = c["恢復買賣日"]; ev[d] = dict(m=1 - float(c["減資比率"]), c=float(c["每股退還現金"]), note=f"{c['類型']}：每原股換{1-float(c['減資比率']):.4g}股、退還現金{c['每股退還現金']}元（MOPS）")
+        CACHE[sid] = (px, ev)
     return CACHE[sid]
 CA = {}
 for c in csv.DictReader(open("corporate_actions_025.csv", encoding="utf-8-sig")): CA.setdefault(c["公司代號"], []).append(c)
@@ -100,12 +123,22 @@ def build(evs, tag):
                     jump = (d, pc, x["open"], x["close"]); break
             if jump:
                 base["H"][H] = {"status": f"未解決：{jump[0]} 跳價（前收 {jump[1]} → 開 {jump[2]}／收 {jump[3]}）疑似公司行動未核對", "sched": sched}; continue
-            f = 1.0
-            for k in range(k0 + 1, CPOS[act] + 1): f *= dv.get(CAL[k], 1.0)
-            ex = px[act]; g = ex["close"] * f / en["open"] - 1
+            sh, cash, notes_ca, bad = 1.0, 0.0, [], None
+            for k in range(k0 + 1, CPOS[act] + 1):
+                e = dv.get(CAL[k])
+                if not e: continue
+                if "bad" in e: bad = (CAL[k], e); break
+                cash += sh * e["c"]; sh *= e["m"]; notes_ca.append(f"{CAL[k]} {e['note']}")
+            ex = px[act]
             idx = IDX["TPEx" if r["市場別"] == "otc" else "TAIEX"]; ia, ib = idx.get(Ed), idx.get(act)
             mk = (ib["close"] / ia["open"] - 1) if ia and ib else None
-            base["H"][H] = {"status": status, "sched": sched, "exit": act, "close": ex["close"], "f": f, "ret": g, "mk": mk,
+            if bad:
+                d_, e = bad; pr = ex["close"] / en["open"] - 1; lo = f"價格報酬{pr:+.4%}"; hi = None
+                if "val" in e: hi = (ex["close"] + e["val"]) / en["open"] - 1; lo += f"；若除權價差（FinMind 權值{e['val']}元/原股）計為應收則約{hi:+.4%}（僅供界線，未納入）"
+                base["H"][H] = {"status": f"未解決：{d_} {e['bad']}。{lo}", "sched": sched,
+                                "alt": {"lo": pr, "hi": hi, "hold": CPOS[act] - k0 + 1, "mk": mk, "exit_lock": locked(px, act), "exit": act}}; continue
+            g = (ex["close"] * sh + cash) / en["open"] - 1
+            base["H"][H] = {"status": status, "sched": sched, "exit": act, "close": ex["close"], "sh": sh, "cash": cash, "ca": "；".join(notes_ca), "ret": g, "mk": mk,
                             "hold": CPOS[act] - k0 + 1, "exit_lock": locked(px, act)}
         out.append(base)
     return out, notes
@@ -173,10 +206,31 @@ for kind in ("做多", "做多超額(減大盤)"):
         if s: s.update(樣本="全期", 層="觀察組", 子樣本="理論價格（全部完成）"); rows.append(s)
 cols = ["樣本", "層", "組", "子樣本", "口徑", "持有H", "樣本數", "平均報酬", "平均持有交易日數", "單利年化", "勝率", "賠率R", "凱利", "半凱利", "標準差", "t值", "雙尾p",
         "聚合單位", "聚合單位數", "單位最大筆數", "聚合t", "聚合p", "Holm_聚合p", "中位數", "第5百分位", "最小值", "最大值", "N/A原因", "bt_stats版本"]
-w = csv.writer(open("out/025_回測結果_參數全表_V01_R03.csv", "w", encoding="utf-8-sig", newline="")); w.writerow(cols)
+w = csv.writer(open("out/025_回測結果_參數全表_V01_R04.csv", "w", encoding="utf-8-sig", newline="")); w.writerow(cols)
 for s in rows: w.writerow(["" if s.get(c) is None else s.get(c) for c in cols])
+# 敏感度：現金增資認購權列（匯僑 2904 2022-08-23，主表列未解決）以兩種口徑納入的界線（全期、做多、理論價格；不改主表）
+import copy
+def with_alt(key):
+    out = []
+    for t in T:
+        t2 = dict(t); t2["H"] = {}
+        for H, h in t["H"].items():
+            a = h.get("alt")
+            if a and a.get(key) is not None: h2 = dict(h); h2.update(ret=a[key], mk=a["mk"], hold=a["hold"], exit_lock=a["exit_lock"], exit=a["exit"]); t2["H"][H] = h2
+            else: t2["H"][H] = h
+        out.append(t2)
+    return out
+sens_rows = []
+for conv, key in (("納入：價格報酬（認購權不計值）", "lo"), ("納入：除權價差計為應收（FinMind 權值）", "hi")):
+    TT = with_alt(key)
+    for lname, kf in (("全體", lambda r: True), ("到期不續約", lambda r: r["終止時點"] == "到期不續約"), ("租賃出租方", lambda r: ctype(r) == "租賃出租方"), ("對方發動", lambda r: r["發動方"] == "對方發動")):
+        for H in HS:
+            s_ = table([t for t in TT if kf(t["r"])], lname, "做多", H)
+            if s_: s_.update(樣本="全期", 層="敏感度", 子樣本=conv); sens_rows.append(s_)
+w = csv.writer(open("out/025_敏感度_匯僑現增認購權_V01_R04.csv", "w", encoding="utf-8-sig", newline="")); w.writerow(cols)
+for s_ in sens_rows: w.writerow(["" if s_.get(c) is None else s_.get(c) for c in cols])
 # 年度與個股分布（全期、做多、H10／H20，理論價格）
-w = csv.writer(open("out/025_分布_年度個股_V01_R03.csv", "w", encoding="utf-8-sig", newline=""))
+w = csv.writer(open("out/025_分布_年度個股_V01_R04.csv", "w", encoding="utf-8-sig", newline=""))
 w.writerow(["分類", "鍵", "持有H", "樣本數", "平均報酬", "中位數", "合計報酬貢獻"])
 for H in (10, 20):
     for kname, kf in (("年度", lambda t: t["r"]["發言日期"][:4]), ("個股", lambda t: f'{t["r"]["公司代號"]} {t["r"]["公司名稱"]}')):
@@ -185,9 +239,9 @@ for H in (10, 20):
             if done(t, H): g[kf(t)].append(t["H"][H]["ret"])
         for k, v in sorted(g.items()): w.writerow([kname, k, H, len(v), sum(v) / len(v), median(v), sum(v)])
 # 原始數據明細（一列一筆：事件 × 持有期）
-dw = csv.writer(open("out/025_原始數據明細_V01_R03.csv", "w", encoding="utf-8-sig", newline=""))
+dw = csv.writer(open("out/025_原始數據明細_V01_R04.csv", "w", encoding="utf-8-sig", newline=""))
 dw.writerow(["交易編號", "持有H", "事件ID", "公司代號", "公司名稱", "公告日", "公告時間", "進場日E", "進場價(開盤)", "預定出場日", "實際出場日", "出場價(收盤)",
-             "實際持有市場交易日數", "除權息調整因子", "報酬(小數)", "大盤同期報酬", "超額報酬", "聚合單位標籤(進場日)", "樣本內外", "合約類型", "終止時點", "發動方",
+             "實際持有市場交易日數", "持股倍數", "現金權利(每原股)", "公司行動明細", "報酬(小數)", "大盤同期報酬", "超額報酬", "聚合單位標籤(進場日)", "樣本內外", "合約類型", "終止時點", "發動方",
              "進場一字鎖板", "出場一字鎖板", "七窗口皆完成", "狀態／排除原因"])
 k = 0
 for t in T + TO:
@@ -195,11 +249,11 @@ for t in T + TO:
     for H in HS:
         k += 1; base = [f"T{k:05d}", H, r["事件ID"], r["公司代號"], r["公司名稱"], r["發言日期"], r["發言時間"], t["E"]]
         if "entry_fail" in t:
-            dw.writerow(base + [""] * 9 + [t["E"], grp, r["類別"], r["終止時點"], r["發動方"], "", "", 0, t["entry_fail"] + "，不延後進場"]); continue
+            dw.writerow(base + [""] * 11 + [t["E"], grp, r["類別"], r["終止時點"], r["發動方"], "", "", 0, t["entry_fail"] + "，不延後進場"]); continue
         h = t["H"][H]
         if "ret" not in h:
-            dw.writerow(base + [t["open"], h["sched"]] + [""] * 7 + [t["E"], grp, r["類別"], r["終止時點"], r["發動方"], int(t["entry_lock"]), "", int(id(t) in COMMON), h["status"]]); continue
-        dw.writerow(base + [t["open"], h["sched"], h["exit"], h["close"], h["hold"], h["f"], h["ret"], "" if h["mk"] is None else h["mk"], "" if h["mk"] is None else h["ret"] - h["mk"],
+            dw.writerow(base + [t["open"], h["sched"]] + [""] * 9 + [t["E"], grp, r["類別"], r["終止時點"], r["發動方"], int(t["entry_lock"]), "", int(id(t) in COMMON), h["status"]]); continue
+        dw.writerow(base + [t["open"], h["sched"], h["exit"], h["close"], h["hold"], h["sh"], h["cash"], h["ca"], h["ret"], "" if h["mk"] is None else h["mk"], "" if h["mk"] is None else h["ret"] - h["mk"],
                     t["E"], grp, r["類別"], r["終止時點"], r["發動方"], int(t["entry_lock"]), int(h["exit_lock"]), int(id(t) in COMMON), h["status"]])
 st = collections.Counter()
 for t in T:
