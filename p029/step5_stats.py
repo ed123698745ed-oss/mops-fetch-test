@@ -124,7 +124,7 @@ for H in HS:
 rows += D
 cols = ["表", "樣本", "層", "組", "子樣本", "口徑", "持有H", "樣本數", "平均報酬", "平均持有交易日數", "單利年化", "勝率", "賠率R", "凱利", "半凱利", "標準差", "t值", "雙尾p",
         "聚合單位", "聚合單位數", "單位最大筆數", "聚合t", "聚合p", "Holm_聚合p(層內)", "中位數", "最小值", "最大值", "N/A原因", "bt_stats版本"]
-with open("029_回測結果_參數全表_V01_R01.csv", "w", encoding="utf-8-sig", newline="") as f:
+with open("029_回測結果_參數全表_V01_R03.csv", "w", encoding="utf-8-sig", newline="") as f:
     w = csv.writer(f); w.writerow(cols)
     for s in rows: w.writerow(["" if s.get(c) is None else s.get(c) for c in cols])
 # B 距 A 交易日數分布（以進場日在市場日曆的位置差計）

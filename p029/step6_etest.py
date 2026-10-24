@@ -1,4 +1,4 @@
-# 029 E-Test（不構成正式結論）
+# 029 E-Test（不構成正式結論）；R03：報酬改用 step4 實際現金流（cashflow），與正式版一致
 # E-Test-1（Ed 2026-10-22 同意比照 024／026／027）：依公告時段提前進場
 #   盤前（S 為交易日且公告時間 < 09:00）：S 當日開盤進場，第 S+(H−1) 交易日收盤出場；持有 H 日。
 #   盤中（S 為交易日且 09:00 ≤ 公告時間 < 13:25）：S 當日收盤進場，S 後第 H 個交易日收盤出場；持有 H+1 日（含進場日）。
@@ -49,9 +49,8 @@ def run(sid, ei, field, H, extra, side):
         p0, n, _ = B.prev_valid(px, d)
         up = (1 + B.limit(d)) ** n - 1 + 0.015; dn = 1 - (1 - B.limit(d)) ** n + 0.015
         if p0 and any(v / p0 - 1 > up or 1 - v / p0 > dn for v in (x["open"], x["close"])): return None, "跳價未解決"
-    f = 1.0
-    for k in range(ei + 1, B.CPOS[act] + 1): f *= dv.get(B.CAL[k], 1.0)
-    g = px[act]["close"] * f / en[field] - 1
+    sh_, cash_, _n = B.cashflow(sid, ei, B.CPOS[act])          # R03：實際現金流（同 step4）
+    g = (px[act]["close"] * sh_ + cash_) / en[field] - 1
     return {"ret": g if side == "long" else -g, "hold": B.CPOS[act] - ei + 1, "entry": Ed, "exit": act, "note": note}, ""
 def open_at_limit_up(sid, ei):
     px, dv, _, _ = B.stock(sid); Ed = B.CAL[ei]; en = px.get(Ed)
@@ -121,12 +120,12 @@ for route in ("A", "B"):
                         s = stat([d["報酬"] for d in xs], [d["持有日數"] for d in xs], [d["進場日E"] for d in xs], 路線=route, 利益占市值=grp, E開盤在漲停價=ol, 樣本=sname, 口徑=dirn, 持有H=H)
                         if s: out2.append(s)
 C = ["樣本數", "平均報酬", "平均持有交易日數", "單利年化", "勝率", "賠率R", "凱利", "半凱利", "標準差", "t值", "雙尾p", "聚合單位", "聚合單位數", "單位最大筆數", "聚合t", "聚合p", "中位數", "N/A原因", "bt_stats版本"]
-for fn, rows, lead in (("029_ETest1_公告時段_全表_V01_R01.csv", out1, ["路線", "時段", "樣本", "版本", "口徑", "持有H"]),
-                       ("029_ETest2_開盤漲停濾網_全表_V01_R01.csv", out2, ["路線", "利益占市值", "E開盤在漲停價", "樣本", "口徑", "持有H"])):
+for fn, rows, lead in (("029_ETest1_公告時段_全表_V01_R03.csv", out1, ["路線", "時段", "樣本", "版本", "口徑", "持有H"]),
+                       ("029_ETest2_開盤漲停濾網_全表_V01_R03.csv", out2, ["路線", "利益占市值", "E開盤在漲停價", "樣本", "口徑", "持有H"])):
     with open(fn, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f); w.writerow(lead + C)
         for s in rows: w.writerow(["" if s.get(c) is None else s.get(c) for c in lead + C])
-for fn, rows in (("029_ETest1_明細_V01_R01.csv", D1), ("029_ETest2_明細_V01_R01.csv", D2)):
+for fn, rows in (("029_ETest1_明細_V01_R03.csv", D1), ("029_ETest2_明細_V01_R03.csv", D2)):
     with open(fn, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, list(rows[0].keys())); w.writeheader(); w.writerows(rows)
 print("E1", len(out1), "E2", len(out2), collections.Counter(d["時段"] for d in D1 if d["H"] == 1 and d["方向"] == "做多"))

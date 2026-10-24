@@ -4,7 +4,14 @@
 #     E 個股無有效開盤（無資料／成交量 0／開盤≤0）→ 列「進場無法成交」，不延後。
 #  2. 出場：E 起第 H 個市場交易日收盤（H＝1,2,3,5,10,20,40；進場日算第 1 日）；當日無有效收盤 → 順延至第一個有效收盤日，記實際持有日數；
 #     順延期間已終止上市櫃 → 以最終交易日收盤結算並標記；預定出場日晚於資料終點 → 未完成。
-#  3. 報酬＝出場收盤 × 持有期間公司行動調整因子 ÷ 進場開盤 − 1（因子＝除權息前收盤 ÷ 參考價；減資、分割、面額變更同法）；放空＝−報酬（假設成交研究）。
+#  3. 報酬（R03，策略卡第 16 節實際現金流）＝（出場收盤 × 持股數 ＋ 持有期間收到的現金）÷ 進場開盤 − 1；放空＝−報酬（放空者付出同額現金股利，假設成交研究）。
+#     持股數與現金依公司行動逐筆計算（進場日之後、出場日當天以前的除權息／減資／分割／面額變更日）：
+#     現金股利：每股現金＝除息前收盤 − 除息參考價（FinMind TaiwanStockDividendResult「息」）；股票股利：持股 ×（除權前收盤 ÷ 除權參考價）；
+#     含除權者：以 FinMind TaiwanStockDividend 拆成現金股利（盈餘＋公積）、股票股利（盈餘＋公積，元／股 ÷ 面額 10 元）與現金增資認購權，
+#     並以參考價公式（前收盤 − 現金 ＋ 認購價 × 認購率）÷（1 ＋ 股票股利率 ＋ 認購率）核對，差 ≤1% 才採用，否則列「除權拆分不符」改用乘數；
+#     現金增資認購權假設不認購（不投入新資金，認購權價值不計入報酬）；
+#     現金減資：退還股款＝面額 10 元 × 減資比率 k，k＝（減資後參考價 − 減資前收盤）÷（減資後參考價 − 10），持股 ×（1 − k）；彌補虧損減資、分割、面額變更：持股 ×（前收盤 ÷ 參考價）。
+#     R01／R02 曾用「前收盤 ÷ 參考價」乘數把現金股利當作再投資（Eve R02 複審 P1），R03 改正。
 #  4. 持有期間（不含進場日）出現無法以公司行動解釋的跳價（與前一有效收盤相隔 n 日，超過 n 日累積漲跌停幅度＋1.5 個百分點）→ 列「未解決：疑似公司行動未核對」。
 #  5. 進場日或出場日為一字價且達漲跌停 → 標記日線無法證明成交；理論價格樣本全列，另列可成交樣本。
 #  6. 利益占市值＝訊號公告明示、可歸屬本公司之處分利益（約當台幣）÷（S 前一市場交易日收盤 × 該日已發行股數）。
@@ -15,6 +22,15 @@ import pandas as pd
 sys.path.insert(0, sys.argv[2])  # repo 路徑（bt_stats 1.0，與 Drive 原檔相同）
 from bt_stats import summarize
 DATA = sys.argv[1]               # out/p029
+DIVDATA = os.environ.get("P029_DIVDATA") or os.path.join(os.path.dirname(DATA.rstrip("/")), "p029div")   # R03：TaiwanStockDividend（現金／股票股利拆分）
+CF = {}                          # R03：公司行動現金流事件 {股票: {日期: [(類型, 持股乘數, 每股現金, 說明)]}}
+def cashflow(sid, ei, xi):
+    """進場日之後到出場日（含）的公司行動：回傳（持股數、每股原始持股累計現金、說明清單）"""
+    s, C, notes = 1.0, 0.0, []
+    for k in range(ei + 1, xi + 1):
+        for typ, m, c, why in CF.get(sid, {}).get(CAL[k], []):
+            C += s * c; s *= m; notes.append(f"{CAL[k]}{why}")
+    return s, C, notes
 HS = [1, 2, 3, 5, 10, 20, 40]
 def rcsv(p):
     if not os.path.exists(p): return []
@@ -42,13 +58,39 @@ def stock(sid):
     for r in rcsv(f"{DATA}/{sid}_TaiwanStockPrice.csv.gz"):
         px[r["date"]] = {"open": fl(r["open"]), "max": fl(r["max"]), "min": fl(r["min"]), "close": fl(r["close"]), "vol": fl(r["Trading_Volume"])}
     ca = {}
-    def add(d, f, why):
-        if d and f and f > 0 and abs(f - 1) > 1e-9: ca.setdefault(d, []).append((f, why))
+    def add(d, f, why, ev=None):
+        if d and f and f > 0 and abs(f - 1) > 1e-9:
+            ca.setdefault(d, []).append((f, why)); CF.setdefault(sid, {}).setdefault(d, []).append(ev or ("share", f, 0.0, why))
+    DIVX = {}                                      # 日期 → [現金股利, 股票股利比率, 現增認購比率, 認購價]
+    for x in rjson(f"{DIVDATA}/{sid}_TaiwanStockDividend.json"):
+        c = fl(x.get("CashEarningsDistribution")) + fl(x.get("CashStatutorySurplus")); st = fl(x.get("StockEarningsDistribution")) + fl(x.get("StockStatutorySurplus"))
+        q, p = fl(x.get("CashIncreaseSubscriptionRate")) / 100.0, fl(x.get("CashIncreaseSubscriptionpRrice"))
+        cd, sd = x.get("CashExDividendTradingDate"), x.get("StockExDividendTradingDate")
+        if cd: DIVX.setdefault(cd, [0.0, 0.0, 0.0, 0.0])[0] += c
+        if sd:
+            v = DIVX.setdefault(sd, [0.0, 0.0, 0.0, 0.0]); v[1] += st / 10.0
+            if q > 0 and p > 0: v[2] += q; v[3] = p
     for x in rjson(f"{DATA}/{sid}_TaiwanStockDividendResult.json"):
-        if fl(x.get("after_price")): add(x["date"], fl(x["before_price"]) / fl(x["after_price"]), "除權息")
+        a, b, kind = fl(x.get("before_price")), fl(x.get("after_price")), x.get("stock_or_cache_dividend", "")
+        if not (a and b): continue
+        if "權" not in kind:                       # 純現金股利：每股現金＝前收盤 − 參考價
+            ev = ("cash", 1.0, a - b, "現金股利")
+        else:                                       # 含除權：依 TaiwanStockDividend 拆成現金股利、股票股利、現金增資認購權
+            c, r, q, p = DIVX.get(x["date"], [None, None, None, None])
+            if c is not None and abs((a - c + p * q) / (1 + r + q) / b - 1) <= 0.01:
+                why = "除權息（拆分）" + ("；現增除權不認購" if q > 0 else "")
+                ev = ("cashshare", 1 + r, c, why)
+            else: ev = ("share", a / b, 0.0, "除權拆分不符：改用乘數")
+        add(x["date"], a / b, "除權息", ev)
     for x in rjson(f"{DATA}/{sid}_TaiwanStockCapitalReductionReferencePrice.json"):
         a, b = fl(x.get("ClosingPriceonTheLastTradingDay")), fl(x.get("PostReductionReferencePrice"))
-        if a and b: add(x["date"], a / b, "減資")
+        if not (a and b): continue
+        why = x.get("ReasonforCapitalReduction", "")
+        if why in ("Cash refund", "現金減資") and abs(b - 10) > 1e-9 and 0 < (b - a) / (b - 10) < 1:
+            k = (b - a) / (b - 10); ev = ("cashshare", 1 - k, 10 * k, "現金減資（面額退還推算）")
+        elif why in ("Cash refund", "現金減資"): ev = ("share", a / b, 0.0, "現金減資推算失敗：改用乘數")
+        else: ev = ("share", a / b, 0.0, "減資（彌補虧損）")
+        add(x["date"], a / b, "減資", ev)
     for x in rjson(f"{DATA}/{sid}_TaiwanStockSplitPrice.json"):
         a, b = fl(x.get("before_price")), fl(x.get("after_price"))
         if a and b: add(x["date"], a / b, "分割／合併")
@@ -193,10 +235,11 @@ def main():
             if jump: base["H"][H] = {"status": f"未解決：{jump[0]} 跳價（前收 {jump[1]} → 開 {jump[2]}／收 {jump[3]}）疑似公司行動未核對", "sched": sched}; continue
             f = 1.0
             for k in range(ei + 1, CPOS[act] + 1): f *= dv.get(CAL[k], 1.0)
-            ex = px[act]; g_ = ex["close"] * f / en["open"] - 1
+            sh_, cash_, ca_notes = cashflow(sid, ei, CPOS[act])
+            ex = px[act]; g_ = (ex["close"] * sh_ + cash_) / en["open"] - 1
             mk_ = IDX["TPEx" if r["市場別_現值"] == "otc" else "TAIEX"]
             ia, ib = mk_.get(Ed), mk_.get(act)
-            h = {"status": status, "sched": sched, "exit": act, "close": ex["close"], "f": f, "ret": g_,
+            h = {"status": status, "sched": sched, "exit": act, "close": ex["close"], "f": f, "shares": sh_, "cash": cash_, "ca_notes": "；".join(ca_notes), "ret": g_,
                  "mk": (ib["close"] / ia["open"] - 1) if ia and ib and ia["open"] > 0 else None, "hold": CPOS[act] - ei + 1, "exit_lock": locked(px, act)}
             # 可成交口徑：出場日為一字鎖板且方向不利（多方遇一字跌停、空方遇一字漲停）→ 順延至第一個非該鎖板的有效收盤日
             for side, block in (("long", "跌停"), ("short", "漲停")):
@@ -219,10 +262,9 @@ def main():
                     up = (1 + limit(d)) ** n - 1 + 0.015; dn = 1 - (1 - limit(d)) ** n + 0.015
                     if p0 and any(v / p0 - 1 > up or 1 - v / p0 > dn for v in (x["open"], x["close"])): bad = d; break
                 if bad: h[side] = {"status": f"順延期間 {bad} 跳價未解決", "ret": None}; continue
-                f2 = 1.0
-                for k in range(ei + 1, CPOS[a2] + 1): f2 *= dv.get(CAL[k], 1.0)
-                g2 = px[a2]["close"] * f2 / en["open"] - 1; ib2 = mk_.get(a2)
-                h[side] = {"status": note or status, "exit": a2, "ret": g2 if side == "long" else -g2, "hold": CPOS[a2] - ei + 1,
+                s2, c2, n2 = cashflow(sid, ei, CPOS[a2])
+                g2 = (px[a2]["close"] * s2 + c2) / en["open"] - 1; ib2 = mk_.get(a2)
+                h[side] = {"status": note or status, "exit": a2, "ret": g2 if side == "long" else -g2, "hold": CPOS[a2] - ei + 1, "shares": s2, "cash": c2, "ca_notes": "；".join(n2),
                            "mk": ((ib2["close"] / ia["open"] - 1) if ia and ib2 and ia["open"] > 0 else None)}
             base["H"][H] = h
         T.append(base)

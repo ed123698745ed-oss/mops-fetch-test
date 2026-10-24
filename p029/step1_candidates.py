@@ -2,7 +2,9 @@
 import pandas as pd, glob, re, sys
 REPO = sys.argv[1]
 df = pd.concat([pd.read_csv(f, dtype=str) for f in sorted(glob.glob(f"{REPO}/merged/MOPS每日重大訊息_公告總表_20*.csv.gz"))], ignore_index=True)
-df = df[(df["發言日期"] >= "20100101")].copy()
+import os
+FROM, TO = os.environ.get("P029_FROM", "20100101"), os.environ.get("P029_TO", "99999999")   # R03：2007～2009 獨立驗證另跑
+df = df[(df["發言日期"] >= FROM) & (df["發言日期"] <= TO)].copy()
 df["主旨"] = df["主旨"].fillna("").str.replace("\n", "", regex=False)
 df["說明"] = df["說明"].fillna("")
 df = df.drop_duplicates(["公司代號", "發言日期", "發言時間", "主旨"])

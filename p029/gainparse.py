@@ -1,5 +1,5 @@
 # 029 處分損益欄位解析（固定規則；無法解析者不推估）
-import re
+import re, taxrule
 CUR = [("TWD", r"新臺幣|新台幣|台幣|臺幣|NTD|NT\$|TWD|NT"), ("USD", r"美元|美金|USD|US\$|U\.S\.\$"), ("CNY", r"人民幣|RMB|CNY"),
        ("HKD", r"港幣|港元|HKD|HK\$"), ("JPY", r"日圓|日幣|日元|JPY"), ("EUR", r"歐元|EUR"), ("VND", r"越南盾|VND"), ("THB", r"泰銖|THB"),
        ("MYR", r"馬幣|令吉|MYR"), ("SGD", r"新加坡幣|新幣|SGD"), ("KRW", r"韓元|韓圜|KRW"), ("PHP", r"披索|PHP"), ("IDR", r"印尼盾|IDR"),
@@ -62,7 +62,7 @@ def parse(t):
     raw = t; t1 = re.sub(r"^\s*(?:預計)?處分利益[（(]或損失[）)][^:：]{0,20}[:：]", "", t.replace("\n", " "))
     if re.fullmatch(r"\s*(不適用|N/?A|na|－|-|無|尚無|—)\s*[。.]?\s*", t1, re.I): out["狀態"] = "不適用／無"; return out
     out["預估實際"] = "預估" if re.search(r"預計|預估|暫估|估計|估算|約", t1) else ("實際" if re.search(r"實際|已實現|認列|確定", t1) else "未明")
-    out["稅別"] = "稅後" if "稅後" in t1 else ("稅前" if "稅前" in t1 else "推定稅前（格式欄位，Ed 10/22）")
+    out["稅別"] = taxrule.tax(t1)   # R03：Ed 2026-10-24「已扣除稅費」視為稅後（taxrule.py）
     if re.search(r"尚待|待.*(評估|估算|確定|計算)|尚未.*(確定|估算|評估)|無法.*(估|計算)|視.*而定|將依|另行公告|俟", t1) and not re.search(NUM, clean(t1)):
         out["狀態"] = "未量化（尚待估算等）"; return out
     c = clean(t1)

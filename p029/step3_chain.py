@@ -35,7 +35,13 @@ k["鏈內序"] = k.groupby("鏈ID").cumcount() + 1
 # 上市櫃期間
 PER = {r["公司代號"]: r for r in csv.DictReader(open(f"{REPO}/listing/上市櫃期間表.csv", encoding="utf-8-sig"))}
 import json
-cal = sorted(x["date"].replace("-", "") for x in json.load(open(f"{REPO}/prices/raw/TaiwanStockPrice_TAIEX.json"))["data"] if x["close"] > 0)
+import os
+_calf = os.environ.get("P029_CAL")                 # R03：2007～2009 驗證用 FinMind 加權指數（csv.gz）
+if _calf:
+    import gzip as _gz
+    cal = sorted(r["date"].replace("-", "") for r in csv.DictReader(_gz.open(_calf, "rt", encoding="utf-8")) if float(r["close"] or 0) > 0)
+else:
+    cal = sorted(x["date"].replace("-", "") for x in json.load(open(f"{REPO}/prices/raw/TaiwanStockPrice_TAIEX.json"))["data"] if x["close"] > 0)
 import bisect
 def next_td(d):
     i = bisect.bisect_right(cal, d); return cal[i] if i < len(cal) else ""
