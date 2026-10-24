@@ -1,0 +1,18 @@
+name: 029 R03 dividend
+on:
+  push:
+    branches: [main]
+    paths: ["p029/div_trigger.txt"]
+permissions:
+  contents: write
+jobs:
+  div:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 p029/fetch_div.py > p029/div_fetch_log.txt 2>&1 || true
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p029div p029/div_fetch_log.txt && git commit -q -m "p029 R03 TaiwanStockDividend [skip ci]" || true
+          for i in 1 2 3 4 5 6; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 20 + 5)); done
