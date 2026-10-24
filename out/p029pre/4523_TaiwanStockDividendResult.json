@@ -1,0 +1,1 @@
+{"status": 200, "data": [{"date": "2008-07-15", "stock_id": "4523", "before_price": 12.1, "after_price": 11.9, "stock_and_cache_dividend": 0.2, "stock_or_cache_dividend": "除息", "max_price": 12.7, "min_price": 11.1, "open_price": 11.9, "reference_price": 11.9}]}
