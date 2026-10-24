@@ -58,6 +58,6 @@ for f in sorted(glob.glob(f'{D}/tab_*.csv')):
     if '參數全表' in f or '排除計數' in f or '公司集中度' in f: continue
     t = pd.read_csv(f); t.insert(0, '表名', f.split('tab_')[1][:-4]); parts.append(t)
 P = pd.concat(parts, ignore_index=True)
-P.to_csv(f'{D}/032_回測結果_參數全表_V01_R01.csv', index=False, encoding='utf-8-sig')
+P.to_csv(f'{D}/032_回測結果_參數全表_V01_R02.csv', index=False, encoding='utf-8-sig')
 print('參數全表列數', len(P))
 print(h.sort_values('Holm校正p')[['方向', 'H', '結果分類', '樣本數', '平均報酬', '聚合p', 'Holm校正p']].head(8).to_string())
