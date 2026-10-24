@@ -1,0 +1,42 @@
+name: 029 R03 fetch
+on:
+  push:
+    branches: [main]
+    paths: ["p029/r03_trigger.txt"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: p029-r03
+  cancel-in-progress: false
+jobs:
+  mops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        r: ["20070101 20070630", "20070701 20071231", "20080101 20080630", "20080701 20081231", "20090101 20090630", "20090701 20091231"]
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -- ${{ matrix.r }}
+          timeout 180m python3 fetch_year.py $1 $2 || true
+      - if: always()
+        run: |
+          gzip -f data/announcements_*.csv || true
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add raw data && git commit -m "MOPS pre2010 ${{ matrix.r }} [skip ci]" || true
+          for i in 1 2 3 4 5 6 7 8; do git pull --rebase -q && git push -q && break; sleep $((RANDOM % 30 + 5)); done
+  div:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          python3 p029/fetch_div.py
+          git fetch -q --depth 1 origin p029-data && git stash -u -q && git checkout -q -B p029-data origin/p029-data && git stash pop -q || true
+          git add out/p029div && git commit -q -m "p029 R03 TaiwanStockDividend [skip ci]" || true
+          for i in 1 2 3 4 5; do git pull -q --rebase origin p029-data; git push -q origin HEAD:p029-data && break; sleep 10; done
