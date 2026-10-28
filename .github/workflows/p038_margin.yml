@@ -8,11 +8,15 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4
-      - run: python3 p038/fetch_margin.py | tee p038/fetch_log.txt || true
+      - run: python3 p038/fetch_margin.py ${{ matrix.k }} 4 | tee p038/fetch_log_${{ matrix.k }}.txt || true
       - run: |
           git config user.name "github-actions" && git config user.email "actions@github.com"
-          git add p038 && git commit -m "038 margin fetch [skip ci]" || true
+          git add p038 && git commit -m "038 margin fetch ${{ matrix.k }} [skip ci]" || true
           for i in 1 2 3 4 5; do git pull --rebase -q && git push -q && break; sleep 10; done
