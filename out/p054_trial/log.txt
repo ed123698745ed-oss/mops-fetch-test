@@ -1,0 +1,43 @@
+bs_3037_101Q4.html: HTTP 200 77201 bytes blocked=False type=
+bs_3037_102Q1.html: HTTP 200 58563 bytes blocked=False type=
+bs_3037_102Q4.html: HTTP 200 46602 bytes blocked=False type=
+bs_3037_103Q1.html: HTTP 200 47194 bytes blocked=False type=
+bs_3037_105Q2.html: HTTP 200 49960 bytes blocked=False type=
+doc_3037_102.html: HTTP 200 5710 bytes blocked=False type=
+doc_3037_103.html: HTTP 200 5710 bytes blocked=False type=
+doc_3037_105.html: HTTP 200 5913 bytes blocked=False type=
+bs_8046_101Q4.html: HTTP 200 53748 bytes blocked=False type=
+bs_8046_102Q1.html: HTTP 200 47738 bytes blocked=False type=
+bs_8046_102Q4.html: HTTP 200 36678 bytes blocked=False type=
+bs_8046_103Q1.html: HTTP 200 37278 bytes blocked=False type=
+bs_8046_105Q2.html: HTTP 200 37955 bytes blocked=False type=
+doc_8046_102.html: HTTP 200 5507 bytes blocked=False type=
+doc_8046_103: 錯誤 <urlopen error timed out>
+doc_8046_105: 錯誤 <urlopen error timed out>
+bs_3189_101Q4.html: HTTP 200 71081 bytes blocked=False type=
+bs_3189_102Q1.html: HTTP 200 49466 bytes blocked=False type=
+bs_3189_102Q4.html: HTTP 200 40852 bytes blocked=False type=
+bs_3189_103Q1.html: HTTP 200 40852 bytes blocked=False type=
+bs_3189_105Q2.html: HTTP 200 41414 bytes blocked=False type=
+doc_3189_102.html: HTTP 200 5503 bytes blocked=False type=
+doc_3189_103.html: HTTP 200 6451 bytes blocked=False type=
+doc_3189_105.html: HTTP 200 7867 bytes blocked=False type=
+bs_2313_101Q4.html: HTTP 200 70844 bytes blocked=False type=
+bs_2313_102Q1.html: HTTP 200 49508 bytes blocked=False type=
+bs_2313_102Q4.html: HTTP 200 39491 bytes blocked=False type=
+bs_2313_103Q1.html: HTTP 200 38655 bytes blocked=False type=
+bs_2313_105Q2.html: HTTP 200 40064 bytes blocked=False type=
+doc_2313_102.html: HTTP 200 5710 bytes blocked=False type=
+doc_2313_103.html: HTTP 200 5507 bytes blocked=False type=
+doc_2313_105.html: HTTP 200 5710 bytes blocked=False type=
+bs_2603_101Q4.html: HTTP 200 17696 bytes blocked=False type=
+bs_2603_102Q1.html: HTTP 200 63913 bytes blocked=False type=
+bs_2603_102Q4.html: HTTP 200 45084 bytes blocked=False type=
+bs_2603_103Q1.html: HTTP 200 43541 bytes blocked=False type=
+bs_2603_105Q2.html: HTTP 200 44204 bytes blocked=False type=
+doc_2603_102.html: HTTP 200 5913 bytes blocked=False type=
+doc_2603_103.html: HTTP 200 5507 bytes blocked=False type=
+doc_2603_105.html: HTTP 200 5710 bytes blocked=False type=
+xbrl 2013Q4: 錯誤 HTTP Error 404: 
+xbrl 2014Q1: 錯誤 HTTP Error 404: 
+完成
