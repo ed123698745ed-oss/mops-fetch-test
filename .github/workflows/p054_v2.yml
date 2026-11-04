@@ -28,7 +28,7 @@ jobs:
         run: |
           git config user.name "github-actions" && git config user.email "actions@github.com"
           for p in out/p054/raw out/p054/basic out/p054/basic_log.txt out/p054/fetch_log_v2_${{ matrix.k }}.txt; do [ -e "$p" ] && git add "$p"; done; git commit -q -m "054 v2 fetch slice ${{ matrix.k }} [skip ci]" || exit 0
-          for i in $(seq 1 12); do git pull -q --rebase origin main || { git rebase --abort; sleep 5; continue; }; git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+          for i in $(seq 1 12); do git pull -q --rebase -X theirs origin main || { git rebase --abort; sleep 5; continue; }; git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
   px:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -41,4 +41,4 @@ jobs:
         run: |
           git config user.name "github-actions" && git config user.email "actions@github.com"
           git add out/p054/px out/p054/px_log_v2.txt && git commit -q -m "054 v2 prices [skip ci]" || exit 0
-          for i in $(seq 1 12); do git pull -q --rebase origin main || { git rebase --abort; sleep 5; continue; }; git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+          for i in $(seq 1 12); do git pull -q --rebase -X theirs origin main || { git rebase --abort; sleep 5; continue; }; git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
