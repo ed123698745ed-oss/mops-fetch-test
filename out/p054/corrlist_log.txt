@@ -114,3 +114,5 @@ out/p054/corrlist/list_202303_otc.html.gz 29778
 out/p054/corrlist/list_202404_otc.html.gz 錯誤 <urlopen error [Errno 111] Connection refused>
 out/p054/corrlist/list_202502_otc.html.gz 27679
 完成
+out/p054/corrlist/list_202404_otc.html.gz 76783
+完成
