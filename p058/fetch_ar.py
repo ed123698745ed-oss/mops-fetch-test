@@ -1,5 +1,6 @@
 # 058 盤點：(1) 公司基本資料 ajax_t05st03（主要經營業務／營業比重，63 檔現行資料）
-#           (2) 年報（mtype=F）清單與 PDF，民國 112、113 年度，四條優先鏈 23 檔；PDF 只保存 pdftotext 全文（gzip），不存 PDF
+#           (2) 年報（mtype=F）清單與 PDF：民國 112、113 年上傳者（S1 客戶證據，四條優先鏈 23 檔）；民國 115 年上傳者（最近年報，63 檔產品純度核對）
+#               PDF 只保存 pdftotext 全文（gzip），不存 PDF
 # 用法：python p058/fetch_ar.py；已存在略過（可接力）；每次請求間隔 3 秒
 import os, re, sys, time, gzip, subprocess, urllib.request, urllib.parse
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
@@ -30,8 +31,9 @@ for c in rd("p058/codes_058.txt"):
         {"encodeURIComponent": 1, "step": 1, "firstin": 1, "off": 1, "keyword4": "", "code1": "", "TYPEK2": "",
          "checkbtn": "", "queryName": "co_id", "inpuType": "co_id", "TYPEK": "all", "co_id": c},
         ref="https://mopsov.twse.com.tw/mops/web/t05st03"))
-for c in rd("p058/codes_ar.txt"):
-    for y in (112, 113):
+jobs = [(c, y) for c in rd("p058/codes_ar.txt") for y in (112, 113)] + [(c, 115) for c in rd("p058/codes_058.txt")]
+for c, y in jobs:
+    if True:
         b = once(f"{OUT}/arlist_{c}_{y}.html.gz", lambda c=c, y=y: get(
             f"https://doc.twse.com.tw/server-java/t57sb01?step=1&colorchg=1&co_id={c}&year={y}&mtype=F&"))
         if not b: continue
