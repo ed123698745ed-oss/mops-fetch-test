@@ -1,0 +1,29 @@
+name: 054 MOPS financial full fetch
+on:
+  push:
+    branches: [main]
+    paths: ["p054/fetch_full.py", "p054/codes_054.txt", "p054/RERUN", ".github/workflows/p054_full.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: p054-full
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: timeout 55m python3 p054/fetch_full.py ${{ matrix.k }} 4 || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p054 && git commit -q -m "054 full fetch slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
