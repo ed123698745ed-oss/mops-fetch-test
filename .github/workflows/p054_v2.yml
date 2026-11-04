@@ -2,7 +2,7 @@ name: 054 v2 expanded universe fetch
 on:
   push:
     branches: [main]
-    paths: ["p054/codes_054v2.txt", "p054/RERUN2", ".github/workflows/p054_v2.yml"]
+    paths: ["p054/codes_054v2.txt", "p054/RERUN2", "p054/fetch_full_v2.py", "p054/fetch_px_v2.py", ".github/workflows/p054_v2.yml"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -23,12 +23,12 @@ jobs:
           fetch-depth: 1
       - run: |
           if [ "${{ matrix.k }}" = "0" ]; then timeout 10m python3 p054/fetch_basic.py || true; fi
-          timeout 52m python3 p054/fetch_full.py ${{ matrix.k }} 4 p054/codes_054v2.txt || true
+          timeout 52m python3 p054/fetch_full_v2.py ${{ matrix.k }} 4 p054/codes_054v2.txt || true
       - if: always()
         run: |
           git config user.name "github-actions" && git config user.email "actions@github.com"
-          git add out/p054 && git commit -q -m "054 v2 fetch slice ${{ matrix.k }} [skip ci]" || exit 0
-          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+          for p in out/p054/raw out/p054/basic out/p054/basic_log.txt out/p054/fetch_log_v2_${{ matrix.k }}.txt; do [ -e "$p" ] && git add "$p"; done; git commit -q -m "054 v2 fetch slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in $(seq 1 12); do git pull -q --rebase origin main || { git rebase --abort; sleep 5; continue; }; git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
   px:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -36,9 +36,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - run: timeout 110m python3 p054/fetch_px.py p054/codes_054v2.txt || true
+      - run: timeout 110m python3 p054/fetch_px_v2.py p054/codes_054v2.txt || true
       - if: always()
         run: |
           git config user.name "github-actions" && git config user.email "actions@github.com"
-          git add out/p054/px out/p054/px_log.txt && git commit -q -m "054 v2 prices [skip ci]" || exit 0
-          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+          git add out/p054/px out/p054/px_log_v2.txt && git commit -q -m "054 v2 prices [skip ci]" || exit 0
+          for i in $(seq 1 12); do git pull -q --rebase origin main || { git rebase --abort; sleep 5; continue; }; git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
