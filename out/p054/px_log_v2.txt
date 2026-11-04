@@ -263,3 +263,4 @@ OK TaiwanStockDividendResult 2641 14
 OK TaiwanStockDividend 2641 17
 OK TaiwanStockCapitalReductionReferencePrice 2641 1
 完成
+完成
