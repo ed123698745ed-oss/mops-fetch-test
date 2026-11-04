@@ -1445,3 +1445,17 @@ is_9914_114Q1 第1次錯誤 <urlopen error timed out>
 is_9914_114Q1 第2次錯誤 <urlopen error timed out>
 is_9914_114Q1 19977
 時間到，下輪接力
+bs_9914_114Q1 43672
+is_9914_114Q2 31909
+bs_9914_114Q2 44958
+is_9914_114Q3 31918
+bs_9914_114Q3 43672
+is_9914_114Q4 21715
+bs_9914_114Q4 32996
+is_9914_115Q1 第1次錯誤 HTTP Error 502: Bad Gateway
+is_9914_115Q1 第2次錯誤 <urlopen error timed out>
+is_9914_115Q1 31910
+bs_9914_115Q1 43672
+is_9914_115Q2 31919
+bs_9914_115Q2 42982
+slice 1 完成
