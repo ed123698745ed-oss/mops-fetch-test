@@ -5,8 +5,8 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 OUT = "out/p054/corr"; os.makedirs(OUT, exist_ok=True)
 log = open("out/p054/corr_log.txt", "a", encoding="utf-8")
 for u in [x.strip() for x in open("p054/corr_urls.txt", encoding="utf-8") if x.strip()]:
-    cid, ys, dt = re.search(r"CID=(\d+)&YEAR_SEASON=(\d+)&.*DTYPE=(\w+)", u).groups()
-    f = f"{OUT}/corr_{cid}_{ys}_{dt}.html.gz"
+    cid, ys, dt, sk = re.search(r"CID=(\d+)&YEAR_SEASON=(\d+)&.*DTYPE=(\w+)&SKEY=(\d+)", u).groups()
+    f = f"{OUT}/corr_{cid}_{ys}_{dt}_S{sk}.html.gz"
     if os.path.exists(f): continue
     for a in range(3):
         try:
