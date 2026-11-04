@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: p058-fin
   cancel-in-progress: false
@@ -27,3 +28,25 @@ jobs:
           git config user.name "github-actions" && git config user.email "actions@github.com"
           git add out/p058 && git commit -q -m "058 fin fetch slice ${{ matrix.k }} [skip ci]" || exit 0
           for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+  relay:
+    # 自動接力：任一切片最後一行是「時間到，下輪接力」就再派一輪；全部完成則停止；最多 8 輪
+    needs: fetch
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: main
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(cat p058/RELAY_COUNT 2>/dev/null || echo 0)
+          more=0; for f in out/p058/fin_log_*.txt; do tail -n 1 "$f" | grep -q "時間到" && more=1; done
+          echo "relay=$n more=$more"
+          if [ "$more" = 1 ] && [ "$n" -lt 8 ]; then
+            echo $((n+1)) > p058/RELAY_COUNT
+            git config user.name "github-actions" && git config user.email "actions@github.com"
+            git add p058/RELAY_COUNT && git commit -q -m "058 fin relay $((n+1)) [skip ci]" && git push -q origin HEAD:main || true
+            gh workflow run p058_fin.yml --ref main
+          fi
