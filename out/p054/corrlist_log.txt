@@ -107,3 +107,10 @@ out/p054/corrlist/list_202601_otc.html.gz 17453
 out/p054/corrlist/list_202602_sii.html.gz 19529
 out/p054/corrlist/list_202602_otc.html.gz 11394
 完成
+out/p054/corrlist/list_201602_otc.html.gz 27740
+out/p054/corrlist/list_201902_otc.html.gz 38171
+out/p054/corrlist/list_202302_otc.html.gz 38269
+out/p054/corrlist/list_202303_otc.html.gz 29778
+out/p054/corrlist/list_202404_otc.html.gz 錯誤 <urlopen error [Errno 111] Connection refused>
+out/p054/corrlist/list_202502_otc.html.gz 27679
+完成
