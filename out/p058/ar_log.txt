@@ -1,0 +1,168 @@
+out/p058/ar/t05st03_1434.html.gz 11773
+out/p058/ar/t05st03_1452.html.gz 11619
+out/p058/ar/t05st03_1460.html.gz 11574
+out/p058/ar/t05st03_1476.html.gz 11617
+out/p058/ar/t05st03_1477.html.gz 11646
+out/p058/ar/t05st03_1517.html.gz 11664
+out/p058/ar/t05st03_2106.html.gz 11649
+out/p058/ar/t05st03_2303.html.gz 11585
+out/p058/ar/t05st03_2313.html.gz 11467
+out/p058/ar/t05st03_2324.html.gz 11674
+out/p058/ar/t05st03_2330.html.gz 11859
+out/p058/ar/t05st03_2344.html.gz 11812
+out/p058/ar/t05st03_2353.html.gz 11741
+out/p058/ar/t05st03_2356.html.gz 11586
+out/p058/ar/t05st03_2357.html.gz 11621
+out/p058/ar/t05st03_2368.html.gz 11643
+out/p058/ar/t05st03_2379.html.gz 11570
+out/p058/ar/t05st03_2382.html.gz 11710
+out/p058/ar/t05st03_2383.html.gz 11589
+out/p058/ar/t05st03_2404.html.gz 11700
+out/p058/ar/t05st03_2408.html.gz 11589
+out/p058/ar/t05st03_2409.html.gz 11638
+out/p058/ar/t05st03_2451.html.gz 11672
+out/p058/ar/t05st03_2454.html.gz 11701
+out/p058/ar/t05st03_3034.html.gz 11871
+out/p058/ar/t05st03_3044.html.gz 11643
+out/p058/ar/t05st03_3081.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/t05st03_3081.html.gz 11733
+out/p058/ar/t05st03_3131.html.gz 11822
+out/p058/ar/t05st03_3163.html.gz 11777
+out/p058/ar/t05st03_3211.html.gz 11713
+out/p058/ar/t05st03_3231.html.gz 11547
+out/p058/ar/t05st03_3234.html.gz 11700
+out/p058/ar/t05st03_3260.html.gz 11660
+out/p058/ar/t05st03_3324.html.gz 11559
+out/p058/ar/t05st03_3338.html.gz 11810
+out/p058/ar/t05st03_3363.html.gz 11730
+out/p058/ar/t05st03_3481.html.gz 11531
+out/p058/ar/t05st03_3532.html.gz 11900
+out/p058/ar/t05st03_3545.html.gz 11761
+out/p058/ar/t05st03_3583.html.gz 11771
+out/p058/ar/t05st03_3596.html.gz 11774
+out/p058/ar/t05st03_4438.html.gz 11658
+out/p058/ar/t05st03_4908.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/t05st03_4908.html.gz 11546
+out/p058/ar/t05st03_4961.html.gz 11618
+out/p058/ar/t05st03_4967.html.gz 11762
+out/p058/ar/t05st03_4979.html.gz 11494
+out/p058/ar/t05st03_5306.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/t05st03_5306.html.gz 11638
+out/p058/ar/t05st03_5347.html.gz 11812
+out/p058/ar/t05st03_5388.html.gz 11554
+out/p058/ar/t05st03_6121.html.gz 11476
+out/p058/ar/t05st03_6182.html.gz 11492
+out/p058/ar/t05st03_6196.html.gz 11652
+out/p058/ar/t05st03_6213.html.gz 11692
+out/p058/ar/t05st03_6274.html.gz 11614
+out/p058/ar/t05st03_6282.html.gz 11654
+out/p058/ar/t05st03_6285.html.gz 11602
+out/p058/ar/t05st03_6412.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/t05st03_6412.html.gz 11838
+out/p058/ar/t05st03_6488.html.gz 11684
+out/p058/ar/t05st03_6669.html.gz 11567
+out/p058/ar/t05st03_8271.html.gz 11616
+out/p058/ar/t05st03_8299.html.gz 11681
+out/p058/ar/t05st03_9914.html.gz 11824
+out/p058/ar/t05st03_9921.html.gz 11735
+out/p058/ar/arlist_2383_112.html.gz 7519
+out/p058/ar/ar_2383_112_2022_2383_20230531F04.txt.gz pdf 4636751
+out/p058/ar/arlist_2383_113.html.gz 7519
+out/p058/ar/ar_2383_113_2023_2383_20240529F04.txt.gz pdf 5306781
+out/p058/ar/arlist_6274_112.html.gz 8511
+out/p058/ar/ar_6274_112_2022_6274_20230615F04.txt.gz pdf 4345534
+out/p058/ar/arlist_6274_113.html.gz 7517
+out/p058/ar/ar_6274_113_2023_6274_20240619F04.txt.gz pdf 4499440
+out/p058/ar/arlist_6213_112.html.gz 8018
+out/p058/ar/ar_6213_112_2022_6213_20230530F04.txt.gz pdf 4323067
+out/p058/ar/arlist_6213_113.html.gz 7517
+out/p058/ar/ar_6213_113_2023_6213_20240530F04.txt.gz pdf 5898834
+out/p058/ar/arlist_2368_112.html.gz 8060
+out/p058/ar/ar_2368_112_2022_2368_20230614F04.txt.gz pdf 6844215
+out/p058/ar/arlist_2368_113.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_2368_113.html.gz 7047
+out/p058/ar/ar_2368_113_2023_2368_20240530F04.txt.gz pdf 5714345
+out/p058/ar/arlist_3044_112.html.gz 7009
+3044 112 2022_3044_20230620F04.pdf 錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_3044_113.html.gz 7009
+out/p058/ar/ar_3044_113_2023_3044_20240618F04.txt.gz pdf 2839219
+out/p058/ar/arlist_2313_112.html.gz 9015
+out/p058/ar/ar_2313_112_2022_2313_20230615F04.txt.gz pdf 2096597
+out/p058/ar/arlist_2313_113.html.gz 8514
+2313 113 2023_2313_20240530F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_6121_112.html.gz 7517
+6121 112 2022_6121_20230531F04.pdf 錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_6121_113.html.gz 8514
+out/p058/ar/ar_6121_113_2023_6121_20240530F04.txt.gz pdf 2152613
+out/p058/ar/arlist_3211_112.html.gz 7517
+out/p058/ar/ar_3211_112_2022_3211_20230609F04.txt.gz pdf 2853113
+out/p058/ar/arlist_3211_113.html.gz 9007
+out/p058/ar/ar_3211_113_2023_3211_20240612F04.txt.gz pdf 4056267
+out/p058/ar/arlist_6412_112.html.gz 8042
+out/p058/ar/ar_6412_112_2022_6412_20230529F04.txt.gz pdf 4542042
+out/p058/ar/arlist_6412_113.html.gz 6571
+out/p058/ar/ar_6412_113_2023_6412_20240527F04.txt.gz pdf 4286921
+out/p058/ar/arlist_6282_112.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_6282_112.html.gz 10961
+out/p058/ar/ar_6282_112_2022_6282_20230526F04.txt.gz pdf 5157938
+out/p058/ar/arlist_6282_113.html.gz 7517
+out/p058/ar/ar_6282_113_2023_6282_20240620F04.txt.gz pdf 6760558
+out/p058/ar/arlist_3324_112.html.gz 7045
+out/p058/ar/ar_3324_112_2022_3324_20230602F04.txt.gz pdf 6668570
+out/p058/ar/arlist_3324_113.html.gz 7045
+out/p058/ar/ar_3324_113_2023_3324_20240524F04.txt.gz pdf 4267631
+out/p058/ar/arlist_3338_112.html.gz 7045
+3338 112 2022_3338_20230530F04.pdf 錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_3338_113.html.gz 7538
+3338 113 2023_3338_20240524F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_2324_112.html.gz 8042
+out/p058/ar/ar_2324_112_2022_2324_20230621F04.txt.gz pdf 10238704
+out/p058/ar/arlist_2324_113.html.gz 7045
+out/p058/ar/ar_2324_113_2023_2324_20240531F04.txt.gz pdf 8355967
+out/p058/ar/arlist_2356_112.html.gz 7519
+out/p058/ar/ar_2356_112_2022_2356_20230613F04.txt.gz pdf 7623386
+out/p058/ar/arlist_2356_113.html.gz 7519
+2356 113 2023_2356_20240612F04.pdf 錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_2382_112.html.gz 8514
+out/p058/ar/ar_2382_112_2022_2382_20230616F04.txt.gz pdf 10463096
+out/p058/ar/arlist_2382_113.html.gz 7517
+2382 113 2023_2382_20240614F04.pdf 錯誤 IncompleteRead(2138112 bytes read, 3985000 more expected)
+out/p058/ar/arlist_3034_112.html.gz 第1次錯誤 HTTP Error 502: Bad Gateway
+out/p058/ar/arlist_3034_112.html.gz 7517
+out/p058/ar/ar_3034_112_2022_3034_20230531F04.txt.gz pdf 7156297
+out/p058/ar/arlist_3034_113.html.gz 7517
+out/p058/ar/ar_3034_113_2023_3034_20240531F04.txt.gz pdf 6165841
+out/p058/ar/arlist_3545_112.html.gz 7045
+3545 112 2022_3545_20230530F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_3545_113.html.gz 7546
+out/p058/ar/ar_3545_113_2023_3545_20240607F04.txt.gz pdf 4270869
+out/p058/ar/arlist_4961_112.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_4961_112.html.gz 7045
+out/p058/ar/ar_4961_112_2022_4961_20230531F04.txt.gz pdf 3912163
+out/p058/ar/arlist_4961_113.html.gz 7517
+out/p058/ar/ar_4961_113_2023_4961_20240531F04.txt.gz pdf 7848776
+out/p058/ar/arlist_2409_112.html.gz 8514
+out/p058/ar/ar_2409_112_2022_2409_20230526F04.txt.gz pdf 4243348
+out/p058/ar/arlist_2409_113.html.gz 7517
+out/p058/ar/ar_2409_113_2023_2409_20240530F04.txt.gz pdf 7638255
+out/p058/ar/arlist_3481_112.html.gz 7517
+out/p058/ar/ar_3481_112_2022_3481_20230531F04.txt.gz pdf 4899737
+out/p058/ar/arlist_3481_113.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_3481_113.html.gz 8014
+out/p058/ar/ar_3481_113_2023_3481_20240531F04.txt.gz pdf 3723631
+out/p058/ar/arlist_5306_112.html.gz 7517
+out/p058/ar/ar_5306_112_2022_5306_20230531F04.txt.gz pdf 5414917
+out/p058/ar/arlist_5306_113.html.gz 7517
+5306 113 2023_5306_20240531F04.pdf 錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_1517_112.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_1517_112.html.gz 7045
+out/p058/ar/ar_1517_112_2022_1517_20230621F04.txt.gz pdf 8179472
+out/p058/ar/arlist_1517_113.html.gz 7045
+out/p058/ar/ar_1517_113_2023_1517_20240625F04.txt.gz pdf 10227911
+out/p058/ar/arlist_2106_112.html.gz 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_2106_112.html.gz 7045
+2106 112 2022_2106_20230531F04.pdf 錯誤 <urlopen error [Errno 111] Connection refused>
+out/p058/ar/arlist_2106_113.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_2106_113.html.gz 7045
+out/p058/ar/ar_2106_113_2023_2106_20240531F04.txt.gz pdf 7969113
+完成
