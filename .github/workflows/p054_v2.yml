@@ -1,0 +1,44 @@
+name: 054 v2 expanded universe fetch
+on:
+  push:
+    branches: [main]
+    paths: ["p054/codes_054v2.txt", "p054/RERUN2", ".github/workflows/p054_v2.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: p054-v2
+  cancel-in-progress: false
+jobs:
+  fs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: |
+          if [ "${{ matrix.k }}" = "0" ]; then timeout 10m python3 p054/fetch_basic.py || true; fi
+          timeout 52m python3 p054/fetch_full.py ${{ matrix.k }} 4 p054/codes_054v2.txt || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p054 && git commit -q -m "054 v2 fetch slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+  px:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: timeout 110m python3 p054/fetch_px.py p054/codes_054v2.txt || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p054/px out/p054/px_log.txt && git commit -q -m "054 v2 prices [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done

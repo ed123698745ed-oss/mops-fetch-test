@@ -6,7 +6,8 @@ import os, sys, time, gzip, urllib.request, urllib.parse
 k, n = int(sys.argv[1]), int(sys.argv[2])
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 OUT = "out/p054/raw"; os.makedirs(OUT, exist_ok=True)
-codes = [x.strip() for x in open("p054/codes_054.txt", encoding="utf-8") if x.strip() and not x.startswith("#")]
+CF = sys.argv[3] if len(sys.argv) > 3 else "p054/codes_054.txt"
+codes = [x.strip() for x in open(CF, encoding="utf-8") if x.strip() and not x.startswith("#")]
 codes = [c.split(",")[0] for c in codes][k::n]
 log = open(f"out/p054/fetch_log_{k}.txt", "a", encoding="utf-8")
 def L(s): print(s); log.write(s + "\n"); log.flush()

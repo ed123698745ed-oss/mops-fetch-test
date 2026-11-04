@@ -26,7 +26,9 @@ def get(params, path):
         if d.get("status") == 402 or "upper limit" in msg:
             L(f"WAIT {params.get('dataset')} {params.get('data_id','')}"); time.sleep(120); continue
         L(f"FAIL {params} {msg[:120]}"); json.dump(d, open(path + ".err", "w", encoding="utf-8"), ensure_ascii=False); return
-codes = [l.split(",")[0] for l in open("p054/codes_054.txt", encoding="utf-8") if l[:1].isdigit()]
+import sys
+CF = sys.argv[1] if len(sys.argv) > 1 else "p054/codes_054.txt"
+codes = [l.split(",")[0] for l in open(CF, encoding="utf-8") if l[:1].isdigit()]
 get({"dataset": "TaiwanStockTradingDate"}, f"{OUT}/TradingDate.json")
 for c in codes:
     for ds in ["TaiwanStockPrice", "TaiwanStockDividendResult", "TaiwanStockDividend", "TaiwanStockCapitalReductionReferencePrice"]:
