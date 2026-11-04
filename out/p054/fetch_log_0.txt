@@ -1281,3 +1281,7 @@ bs_5609_114Q4 30408
 bs_5609_115Q1 40767
 bs_5609_115Q2 40767
 slice 0 完成
+doc_1477_115 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+doc_1477_115 第2次錯誤 <urlopen error [Errno -2] Name or service not known>
+doc_1477_115 5521
+slice 0 完成
