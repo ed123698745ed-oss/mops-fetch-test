@@ -5,7 +5,7 @@
 import os, re, sys, time, gzip, subprocess, urllib.request, urllib.parse
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 OUT = "out/p058/ar"; os.makedirs(OUT, exist_ok=True)
-log = open("out/p058/ar_log.txt", "a", encoding="utf-8")
+log = open(f"out/p058/ar_log_{os.environ.get('GITHUB_RUN_ID', 'local')}.txt", "a", encoding="utf-8")  # 每輪獨立日誌，避免多輪同時推送衝突
 def L(s): print(s, flush=True); log.write(s + "\n"); log.flush()
 DEADLINE = time.time() + 52 * 60
 def rd(p): return [x.strip() for x in open(p, encoding="utf-8") if x.strip() and not x.startswith("#")]
