@@ -1,0 +1,139 @@
+out/p058/ar/ar_3338_112_2022_3338_20230530F04.txt.gz pdf 4550823
+out/p058/ar/arlist_1434_115.html.gz 7538
+1434 115 2025_1434_20260626F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_1452_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_1452_115.html.gz 第2次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_1452_115.html.gz 7538
+out/p058/ar/ar_1452_115_2025_1452_20260612F04.txt.gz pdf 1016233
+out/p058/ar/arlist_1460_115.html.gz 7517
+out/p058/ar/ar_1460_115_2025_1460_20260526F04.txt.gz pdf 6058623
+out/p058/ar/arlist_1476_115.html.gz 8170
+out/p058/ar/ar_1476_115_2025_1476_20260529F04.txt.gz pdf 2829435
+out/p058/ar/arlist_1477_115.html.gz 7045
+out/p058/ar/ar_1477_115_2025_1477_20260526F04.txt.gz pdf 3896533
+out/p058/ar/arlist_1517_115.html.gz 7045
+1517 115 2025_1517_20260625F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_2106_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_2106_115.html.gz 7538
+2106 115 2025_2106_20260603F04.pdf 錯誤 IncompleteRead(2564096 bytes read, 1944572 more expected)
+out/p058/ar/arlist_2303_115.html.gz 8010
+out/p058/ar/ar_2303_115_2025_2303_20260527F04.txt.gz pdf 7103379
+out/p058/ar/arlist_2313_115.html.gz 7517
+out/p058/ar/ar_2313_115_2025_2313_20260528F04.txt.gz pdf 5432017
+out/p058/ar/arlist_2324_115.html.gz 7045
+2324 115 2025_2324_20260529F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_2330_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_2330_115.html.gz 8012
+out/p058/ar/ar_2330_115_2025_2330_20260604F04.txt.gz pdf 7006132
+out/p058/ar/arlist_2344_115.html.gz 7519
+out/p058/ar/ar_2344_115_2025_2344_20260529F04.txt.gz pdf 7563296
+out/p058/ar/arlist_2353_115.html.gz 8014
+2353 115 2025_2353_20260529F04.pdf 錯誤 <urlopen error timed out>
+out/p058/ar/arlist_2356_115.html.gz 7519
+out/p058/ar/ar_2356_115_2025_2356_20260527F04.txt.gz pdf 2513019
+out/p058/ar/arlist_2357_115.html.gz 8012
+out/p058/ar/ar_2357_115_2025_2357_20260529F04.txt.gz pdf 4302796
+out/p058/ar/arlist_2368_115.html.gz 7540
+out/p058/ar/ar_2368_115_2025_2368_20260529F04.txt.gz pdf 4467121
+out/p058/ar/arlist_2379_115.html.gz 7517
+out/p058/ar/ar_2379_115_2025_2379_20260527F04.txt.gz pdf 2912801
+out/p058/ar/arlist_2382_115.html.gz 7517
+out/p058/ar/ar_2382_115_2025_2382_20260529F04.txt.gz pdf 5702719
+out/p058/ar/arlist_2383_115.html.gz 8516
+out/p058/ar/ar_2383_115_2025_2383_20260527F04.txt.gz pdf 3943969
+out/p058/ar/arlist_2404_115.html.gz 7517
+out/p058/ar/ar_2404_115_2025_2404_20260529F04.txt.gz pdf 2565795
+out/p058/ar/arlist_2408_115.html.gz 8537
+out/p058/ar/ar_2408_115_2025_2408_20260521F04.txt.gz pdf 2349699
+out/p058/ar/arlist_2409_115.html.gz 8010
+2409 115 2025_2409_20260528F04.pdf 錯誤 <urlopen error timed out>
+out/p058/ar/arlist_2451_115.html.gz 7517
+out/p058/ar/ar_2451_115_2025_2451_20260617F04.txt.gz pdf 2161554
+out/p058/ar/arlist_2454_115.html.gz 7519
+out/p058/ar/ar_2454_115_2025_2454_20260529F04.txt.gz pdf 2417688
+out/p058/ar/arlist_3034_115.html.gz 7517
+out/p058/ar/ar_3034_115_2025_3034_20260529F04.txt.gz pdf 4233159
+out/p058/ar/arlist_3044_115.html.gz 7477
+out/p058/ar/ar_3044_115_2025_3044_20260529F04.txt.gz pdf 1010635
+out/p058/ar/arlist_3081_115.html.gz 7517
+3081 115 2025_3081_20260527F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_3131_115.html.gz 7549
+out/p058/ar/ar_3131_115_2025_3131_20260617F04.txt.gz pdf 1926145
+out/p058/ar/arlist_3163_115.html.gz 7047
+out/p058/ar/ar_3163_115_2025_3163_20260616F04.txt.gz pdf 1924733
+out/p058/ar/arlist_3211_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_3211_115.html.gz 7517
+out/p058/ar/ar_3211_115_2025_3211_20260611F04.txt.gz pdf 2588280
+out/p058/ar/arlist_3231_115.html.gz 7517
+out/p058/ar/ar_3231_115_2025_3231_20260529F04.txt.gz pdf 17329826
+out/p058/ar/arlist_3234_115.html.gz 7517
+out/p058/ar/ar_3234_115_2025_3234_20260529F04.txt.gz pdf 2426877
+out/p058/ar/arlist_3260_115.html.gz 8010
+out/p058/ar/ar_3260_115_2025_3260_20260522F04.txt.gz pdf 4113605
+out/p058/ar/arlist_3324_115.html.gz 7546
+3324 115 2025_3324_20260521F04.pdf 錯誤 <urlopen error timed out>
+out/p058/ar/arlist_3338_115.html.gz 7045
+out/p058/ar/ar_3338_115_2025_3338_20260526F04.txt.gz pdf 2858851
+out/p058/ar/arlist_3363_115.html.gz 8511
+out/p058/ar/ar_3363_115_2025_3363_20260528F04.txt.gz pdf 6824566
+out/p058/ar/arlist_3481_115.html.gz 9007
+out/p058/ar/ar_3481_115_2025_3481_20260527F04.txt.gz pdf 1504337
+out/p058/ar/arlist_3532_115.html.gz 7540
+out/p058/ar/ar_3532_115_2025_3532_20260611F04.txt.gz pdf 1734613
+out/p058/ar/arlist_3545_115.html.gz 7045
+out/p058/ar/ar_3545_115_2025_3545_20260526F04.txt.gz pdf 3132172
+out/p058/ar/arlist_3583_115.html.gz 7517
+out/p058/ar/ar_3583_115_2025_3583_20260605F04.txt.gz pdf 2277298
+out/p058/ar/arlist_3596_115.html.gz 7045
+out/p058/ar/ar_3596_115_2025_3596_20260527F04.txt.gz pdf 1444878
+out/p058/ar/arlist_4438_115.html.gz 8031
+out/p058/ar/ar_4438_115_2025_4438_20260617F04.txt.gz pdf 2208920
+out/p058/ar/arlist_4908_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_4908_115.html.gz 第2次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_4908_115.html.gz 第3次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_4961_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_4961_115.html.gz 8514
+out/p058/ar/ar_4961_115_2025_4961_20260529F04.txt.gz pdf 9237651
+out/p058/ar/arlist_4967_115.html.gz 7045
+out/p058/ar/ar_4967_115_2025_4967_20260515F04.txt.gz pdf 3923600
+out/p058/ar/arlist_4979_115.html.gz 7519
+out/p058/ar/ar_4979_115_2025_4979_20260527F04.txt.gz pdf 2330895
+out/p058/ar/arlist_5306_115.html.gz 10431
+out/p058/ar/ar_5306_115_2025_5306_20260529F04.txt.gz pdf 3111594
+out/p058/ar/arlist_5347_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_5347_115.html.gz 第2次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_5347_115.html.gz 7517
+out/p058/ar/ar_5347_115_2025_5347_20260528F04.txt.gz pdf 8994989
+out/p058/ar/arlist_5388_115.html.gz 7517
+5388 115 2025_5388_20260611F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_6121_115.html.gz 7517
+out/p058/ar/ar_6121_115_2025_6121_20260529F04.txt.gz pdf 1064393
+out/p058/ar/arlist_6182_115.html.gz 7546
+out/p058/ar/ar_6182_115_2025_6182_20260618F04.txt.gz pdf 3678096
+out/p058/ar/arlist_6196_115.html.gz 7515
+out/p058/ar/ar_6196_115_2025_6196_20260529F04.txt.gz pdf 3927878
+out/p058/ar/arlist_6213_115.html.gz 7517
+6213 115 2025_6213_20260527F04.pdf 錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_6274_115.html.gz 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+out/p058/ar/arlist_6274_115.html.gz 7517
+out/p058/ar/ar_6274_115_2025_6274_20260617F04.txt.gz pdf 6126309
+out/p058/ar/arlist_6282_115.html.gz 8010
+out/p058/ar/ar_6282_115_2025_6282_20260528F04.txt.gz pdf 1507489
+out/p058/ar/arlist_6285_115.html.gz 7517
+6285 115 2025_6285_20260528F04.pdf 錯誤 <urlopen error timed out>
+out/p058/ar/arlist_6412_115.html.gz 第1次錯誤 <urlopen error timed out>
+out/p058/ar/arlist_6412_115.html.gz 6571
+out/p058/ar/ar_6412_115_2025_6412_20260526F04.txt.gz pdf 2236207
+out/p058/ar/arlist_6488_115.html.gz 7519
+out/p058/ar/ar_6488_115_2025_6488_20260525F04.txt.gz pdf 1671915
+out/p058/ar/arlist_6669_115.html.gz 8514
+out/p058/ar/ar_6669_115_2025_6669_20260525F04.txt.gz pdf 2550196
+out/p058/ar/arlist_8271_115.html.gz 7517
+out/p058/ar/ar_8271_115_2025_8271_20260528F04.txt.gz pdf 4765471
+out/p058/ar/arlist_8299_115.html.gz 7517
+out/p058/ar/ar_8299_115_2025_8299_20260527F04.txt.gz pdf 5463968
+out/p058/ar/arlist_9914_115.html.gz 8041
+out/p058/ar/ar_9914_115_2025_9914_20260624F04.txt.gz pdf 3858998
+out/p058/ar/arlist_9921_115.html.gz 7045
+out/p058/ar/ar_9921_115_2025_9921_20260618F04.txt.gz pdf 5808311
+完成
