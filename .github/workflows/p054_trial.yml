@@ -1,0 +1,21 @@
+name: 054 MOPS financial trial
+on:
+  push:
+    branches: [main]
+    paths: ["p054/trial.py", ".github/workflows/p054_trial.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: python3 p054/trial.py || true
+      - run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p054_trial && git commit -q -m "054 MOPS financial trial [skip ci]" || true
+          for i in 1 2 3 4 5; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 10; done
