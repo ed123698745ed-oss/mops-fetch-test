@@ -21,13 +21,15 @@ def get(url, data=None, ref=None):
 
 def job(name, fn):
     f = f"{OUT}/{name}.html.gz"
-    if os.path.exists(f): return
+    if os.path.exists(f) and os.path.getsize(f) > 200: return
     for a in range(3):
         try:
             b = fn()
             if b"SECURITY" in b[:3000]:
                 L(f"{name} 被擋，停止"); raise SystemExit(2)
-            gzip.open(f, "wb").write(b); L(f"{name} {len(b)}"); break
+            
+            with gzip.open(f, "wb") as g: g.write(b)
+            L(f"{name} {len(b)}"); break
         except SystemExit: raise
         except Exception as e:
             L(f"{name} 第{a+1}次錯誤 {e}"); time.sleep(10)
