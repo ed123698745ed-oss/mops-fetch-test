@@ -1,0 +1,26 @@
+name: 058 basic info and annual reports
+on:
+  push:
+    branches: [main]
+    paths: ["p058/fetch_ar.py", "p058/codes_ar.txt", ".github/workflows/p058_ar.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: p058-ar
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: sudo apt-get install -y -q poppler-utils >/dev/null
+      - run: timeout 55m python3 p058/fetch_ar.py || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p058 && git commit -q -m "058 basic info and annual reports [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
