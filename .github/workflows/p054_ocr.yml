@@ -1,0 +1,31 @@
+name: 054 delisted ocr
+on:
+  push:
+    branches: [main]
+    paths: ["p054/fetch_ocr.py", ".github/workflows/p054_ocr.yml", "p054/RERUN_OCR"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: p054-ocr
+  cancel-in-progress: false
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        k: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: sudo apt-get update -q >/dev/null && sudo apt-get install -y -q poppler-utils tesseract-ocr tesseract-ocr-chi-tra >/dev/null
+      - run: timeout 80m python3 p054/fetch_ocr.py ${{ matrix.k }} 4 || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          for p in out/p054/ocr out/p054/ocr_log_${{ matrix.k }}.txt; do [ -e "$p" ] && git add "$p"; done; git commit -q -m "054 ocr slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in $(seq 1 12); do git pull -q --rebase -X theirs origin main || { git rebase --abort; sleep 5; continue; }; git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
