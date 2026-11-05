@@ -26,3 +26,7 @@ slice 0 完成
 202003_6251_AI1.pdf sha256 eee5111324efaad49040373ba820058aabee5d304f43c3f414cc1ec70d83980e ocr_pages [3, 4, 5, 6, 7, 8, 9]
 202103_6251_AI1.pdf sha256 a7323a5aa94814a2daf1c43801a5e64b7781fce8f204c18da60ff117c2aa10c9 ocr_pages [3, 4, 5, 6, 7, 8, 9]
 slice 0 完成
+201602_6251_AI1.pdf sha256 1b4ba4428812fd41d7eddd863819c78311381babbd9a873f28c04d25bd70f0dc ocr_pages [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+202002_6251_AI1.pdf 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+202002_6251_AI1.pdf sha256 4a9070a3504dc429d53d25c3c935aacfed0fe32de296648de8a079f662638b24 ocr_pages [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+slice 0 完成
