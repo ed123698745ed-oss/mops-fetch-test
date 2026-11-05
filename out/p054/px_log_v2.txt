@@ -266,3 +266,4 @@ OK TaiwanStockCapitalReductionReferencePrice 2641 1
 完成
 完成
 完成
+完成
