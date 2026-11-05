@@ -2,7 +2,9 @@
 import gzip, re, os, csv, glob, datetime as dt
 R58='/home/claude/mops-fetch-test/out/p058/raw'; R54='/home/claude/mops-fetch-test/out/p054/raw'
 CL='/home/claude/mops-fetch-test/out/p054/corrlist'
-codes=[x.strip() for x in open('/home/claude/mops-fetch-test/p058/codes_058.txt',encoding='utf-8') if x.strip() and not x.startswith('#')]
+import os
+CF=os.environ.get('CODES','/home/claude/mops-fetch-test/p058/codes_058.txt')
+codes=[x.strip() for x in open(CF,encoding='utf-8') if x.strip() and not x.startswith('#')]
 def page(name):
     for d in (R58,R54):
         f=f'{d}/{name}.html.gz'
@@ -11,7 +13,7 @@ def page(name):
 def cells(b):
     t=b.decode('utf-8','ignore')
     t=re.sub(r'<[^>]+>','|',t); t=re.sub(r'&nbsp;',' ',t); t=re.sub(r'\|[\s|]*\|','|',t)
-    return [c.strip() for c in t.split('|')]
+    return [c.replace('\u3000',' ').strip() for c in t.split('|')]
 def num(s):
     s=s.replace(',','').strip()
     if s in ('','-'): return None
@@ -80,7 +82,7 @@ for f in sorted(glob.glob(f'{CL}/list_*.html.gz')):
             desc=cs[i+3]+' '+cs[i+4]
             if '英文' in cs[i+3]: continue
             corr.setdefault((x,yy,qq),[]).append((cs[i+2],bool(KW.search(cs[i+4])),cs[i+4][:80]))
-w=csv.writer(open('/home/claude/w058/fund_mops.csv','w',encoding='utf-8',newline=''))
+w=csv.writer(open(os.environ.get('FOUT','/home/claude/w058/fund_mops.csv'),'w',encoding='utf-8',newline=''))
 w.writerow(['code','y','q','basis','inv','cogs_q','upload','corr_dates_flag','corr_desc','note'])
 for r in rows:
     u=up.get((r['code'],r['y'],r['q'])); cl=corr.get((r['code'],r['y'],r['q']),[])

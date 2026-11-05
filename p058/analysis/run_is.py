@@ -73,7 +73,7 @@ for k,cut in enumerate(cuts):
         else:
             rec['status']='成交'; rec['rl']=st.mean(rL); rec['rs']=st.mean(rS); rec['ret']=(rec['rl']-rec['rs'])/2
         baskets.append(rec)
-W='/home/claude/w058/out'; import os; os.makedirs(W,exist_ok=True)
+W='/home/claude/w058/out'+('_t' if S.V=='T' else ''); import os; os.makedirs(W,exist_ok=True)
 def dump(name,rows,cols):
     w=csv.writer(open(f'{W}/{name}',"w",encoding='utf-8',newline='')); w.writerow(cols)
     for r in rows: w.writerow([r.get(c,'') if isinstance(r,dict) else r[i] for i,c in enumerate(cols)])

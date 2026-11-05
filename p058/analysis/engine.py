@@ -7,7 +7,7 @@ import elon_tools as ET
 W='/home/claude/w058'
 # ---- 行情 ----
 PX=collections.defaultdict(dict); MKT={}
-for r in csv.DictReader(open(f'{W}/px_seeds.csv',encoding='utf-8')):
+for r in csv.DictReader(open(f'{W}/{"px_all" if S.V=="T" else "px_seeds"}.csv',encoding='utf-8')):
     o=r['open']
     PX[r['code']][r['date']]=dict(o=float(o) if o not in ('',None) else None,h=float(r['high']) if r['high'] else None,
         l=float(r['low']) if r['low'] else None,c=float(r['close']) if r['close'] else None,v=float(r['vol'] or 0),a=float(r['amt'] or 0),mkt=r['mkt'])
@@ -26,9 +26,14 @@ def prev_trade(c,d):
     return None,None
 # ---- 公司行動 ----
 LIMOFF={}
+import os
+def cap(ds,c):
+    for p in (f'{W}/raw_ca/{ds}_{c}.json',f'/home/claude/mops-fetch-test/out/p058/ca/{ds}_{c}.json',f'/home/claude/mops-fetch-test/out/p054/px/{ds}_{c}.json'):
+        if os.path.exists(p): return p
+    return f'{W}/raw_ca/{ds}_{c}.json'
 EV=collections.defaultdict(list); SEO=collections.defaultdict(list); RED=collections.defaultdict(list); REF={}
 for c in PX:
-    try: dv=json.load(open(f'{W}/raw_ca/TaiwanStockDividend_{c}.json'))['data']
+    try: dv=json.load(open(cap('TaiwanStockDividend',c)))['data']
     except FileNotFoundError: dv=[]
     for x in dv:
         cash=(x.get('CashEarningsDistribution') or 0)+(x.get('CashStatutorySurplus') or 0)
@@ -38,10 +43,10 @@ for c in PX:
         if (x.get('CashIncreaseSubscriptionRate') or 0)>0:
             dd=(x.get('StockExDividendTradingDate') or '').replace('-','')
             SEO[c].append(dict(date=dd,rate=x['CashIncreaseSubscriptionRate'],px=x.get('CashIncreaseSubscriptionpRrice'),ann=x.get('date')))
-    try: rr=json.load(open(f'{W}/raw_ca/TaiwanStockDividendResult_{c}.json'))['data']
+    try: rr=json.load(open(cap('TaiwanStockDividendResult',c)))['data']
     except FileNotFoundError: rr=[]
     for x in rr: REF[(c,x['date'].replace('-',''))]=x['reference_price']
-    try: cr=json.load(open(f'{W}/raw_ca/TaiwanStockCapitalReductionReferencePrice_{c}.json'))['data']
+    try: cr=json.load(open(cap('TaiwanStockCapitalReductionReferencePrice',c)))['data']
     except FileNotFoundError: cr=[]
     for x in cr:
         dd=x['date'].replace('-',''); RED[c].append(dd); REF[(c,dd)]=x.get('OpeningReferencePrice') or x.get('PostReductionReferencePrice')
@@ -59,7 +64,7 @@ def limits(c,d):
     return ET.limit_prices(ref,f"{d[:4]}-{d[4:6]}-{d[6:]}")
 # ---- 融資融券（空方）----
 MG={}
-for r in csv.DictReader(open(f'{W}/margin_up.csv',encoding='utf-8')):
+for r in csv.DictReader(open(f'{W}/{"margin_all" if S.V=="T" else "margin_up"}.csv',encoding='utf-8')):
     if r['listed']=='1': MG[(r['code'],r['date'])]=(r['note'],r['short_limit'])
 MG_DAYS=sorted({r for (_,r) in MG})
 def short_ok(c,d):
