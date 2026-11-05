@@ -1,0 +1,1 @@
+{"msg": "success", "status": 200, "data": [{"date": "2018-12-10", "stock_id": "2404", "ClosingPriceonTheLastTradingDay": 63.9, "PostReductionReferencePrice": 77.37, "LimitUp": 85.1, "LimitDown": 69.7, "OpeningReferencePrice": 77.4, "ExrightReferencePrice": -1.0, "ReasonforCapitalReduction": "Cash refund"}]}

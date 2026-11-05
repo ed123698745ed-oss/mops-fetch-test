@@ -1,0 +1,1 @@
+{"msg": "success", "status": 200, "data": [{"date": "2022-10-11", "stock_id": "4967", "ClosingPriceonTheLastTradingDay": 26.05, "PostReductionReferencePrice": 32.92, "LimitUp": 36.2, "LimitDown": 29.65, "OpeningReferencePrice": 32.9, "ExrightReferencePrice": -1.0, "ReasonforCapitalReduction": "Cash refund"}]}
