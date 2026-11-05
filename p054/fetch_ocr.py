@@ -9,7 +9,8 @@ log = open(f"out/p054/ocr_log_{k}.txt", "a", encoding="utf-8")
 def L(s): print(s); log.write(s + "\n"); log.flush()
 def get(u): return urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": UA}), timeout=120).read()
 DEADLINE = time.time() + 75 * 60
-rows = [l.strip().split(",") for l in open("p054/pdf_list.txt") if l.strip()][k::n]
+rows = [l.strip().split(",") for l in open("p054/pdf_list.txt") if l.strip()]
+rows = [r for r in rows if not os.path.exists(f"{OUT}/{r[1]}.done")][k::n]  # 只分配未完成者
 for c, fn in rows:
     done = f"{OUT}/{fn}.done"
     if os.path.exists(done): continue
