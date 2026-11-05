@@ -27,7 +27,8 @@ def job(name, fn):
             b = fn()
             if b"SECURITY" in b[:3000]:
                 L(f"{name} 被擋，停止"); raise SystemExit(2)
-            
+            if "查詢過量".encode("big5") in b or "查詢過量".encode() in b:
+                L(f"{name} 查詢過量，等 60 秒重試"); time.sleep(60); continue
             with gzip.open(f, "wb") as g: g.write(b)
             L(f"{name} {len(b)}"); break
         except SystemExit: raise

@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 1
       - run: |
           if [ "${{ matrix.k }}" = "0" ]; then timeout 10m python3 p054/fetch_basic.py || true; fi
-          timeout 52m python3 p054/fetch_full_v2.py ${{ matrix.k }} 4 p054/codes_054v2.txt || true
+          timeout 52m python3 p054/fetch_full_v2.py ${{ matrix.k }} 4 p054/codes_054all.txt || true
       - if: always()
         run: |
           git config user.name "github-actions" && git config user.email "actions@github.com"
