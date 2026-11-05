@@ -1299,3 +1299,10 @@ bs_5309_102Q1 54908
 bs_1540_114Q1 34167
 doc_9802_111 6933
 slice 1 完成
+doc_3526_114 6451
+doc_3526_115 4112
+doc_6290_114 7867
+doc_2102_114 6451
+doc_2102_115 第1次錯誤 <urlopen error [Errno 111] Connection refused>
+doc_2102_115 4112
+slice 1 完成
