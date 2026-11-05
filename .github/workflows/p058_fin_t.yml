@@ -1,0 +1,51 @@
+name: 058 T fin fetch
+on:
+  push:
+    branches: [main]
+    paths: ["p058/codes_058t_up.txt", ".github/workflows/p058_fin_t.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: p058-fin-t
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [0, 1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: CODES=p058/codes_058t_up.txt LOGTAG=_t timeout 55m python3 p058/fetch_fin.py ${{ matrix.k }} 6 || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p058 && git commit -q -m "058 T fin slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+  relay:
+    needs: fetch
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: main
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(cat p058/RELAY_COUNT_T 2>/dev/null || echo 0)
+          more=0; for f in out/p058/fin_log_t_*.txt; do tail -n 1 "$f" | grep -q "時間到" && more=1; done
+          echo "relay=$n more=$more"
+          if [ "$more" = 1 ] && [ "$n" -lt 8 ]; then
+            echo $((n+1)) > p058/RELAY_COUNT_T
+            git config user.name "github-actions" && git config user.email "actions@github.com"
+            git add p058/RELAY_COUNT_T && git commit -q -m "058 T fin relay $((n+1)) [skip ci]" && git push -q origin HEAD:main || true
+            gh workflow run p058_fin_t.yml --ref main
+          fi

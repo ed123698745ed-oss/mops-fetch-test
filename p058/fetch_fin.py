@@ -5,8 +5,8 @@ import os, sys, time, gzip, urllib.request, urllib.parse
 k, n = int(sys.argv[1]), int(sys.argv[2])
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 OUT = "out/p058/raw"; P54 = "out/p054/raw"; os.makedirs(OUT, exist_ok=True)
-codes = [x.strip() for x in open("p058/codes_058.txt", encoding="utf-8") if x.strip() and not x.startswith("#")][k::n]
-log = open(f"out/p058/fin_log_{k}.txt", "a", encoding="utf-8")
+codes = [x.strip() for x in open(os.environ.get("CODES", "p058/codes_058.txt"), encoding="utf-8") if x.strip() and not x.startswith("#")][k::n]
+log = open(f"out/p058/fin_log{os.environ.get('LOGTAG', '')}_{k}.txt", "a", encoding="utf-8")
 def L(s): print(s, flush=True); log.write(s + "\n"); log.flush()
 DEADLINE = time.time() + 52 * 60
 def get(url, data=None, ref=None):
