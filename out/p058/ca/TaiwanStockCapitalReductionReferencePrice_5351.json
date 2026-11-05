@@ -1,0 +1,1 @@
+{"msg": "success", "status": 200, "data": [{"date": "2020-09-28", "stock_id": "5351", "ClosingPriceonTheLastTradingDay": 9.41, "PostReductionReferencePrice": 18.81, "LimitUp": 20.65, "LimitDown": 16.95, "OpeningReferencePrice": 18.8, "ExrightReferencePrice": 0.0, "ReasonforCapitalReduction": "彌補虧損"}]}

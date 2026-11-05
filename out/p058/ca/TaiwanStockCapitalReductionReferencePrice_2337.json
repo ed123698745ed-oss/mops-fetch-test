@@ -1,0 +1,1 @@
+{"msg": "success", "status": 200, "data": [{"date": "2017-08-28", "stock_id": "2337", "ClosingPriceonTheLastTradingDay": 16.55, "PostReductionReferencePrice": 33.64, "LimitUp": 37.0, "LimitDown": 30.3, "OpeningReferencePrice": 33.65, "ExrightReferencePrice": -1.0, "ReasonforCapitalReduction": "Making up losses"}]}
