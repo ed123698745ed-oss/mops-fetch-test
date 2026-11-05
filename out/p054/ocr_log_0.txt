@@ -18,3 +18,11 @@
 201603_6251_AI1.pdf sha256 55e4fe547461f9f3f8e94c1ff230b258a648251f3311de24f883f3a4702f57ac ocr_pages [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 時間到
 slice 0 完成
+201703_6251_AI1.pdf 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+201703_6251_AI1.pdf sha256 2434e6e9d4a72659b486804f73f85211f75bd80011641f3b54335bc0b7faf0f1 ocr_pages [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+201803_6251_AI1.pdf 第1次錯誤 <urlopen error [Errno -2] Name or service not known>
+201803_6251_AI1.pdf sha256 c5e3cb0e1eaf1c2f13599535738dd685db0bcc5e1fcce05f0195ec0b9e7dcf2c ocr_pages [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+201903_6251_AI1.pdf sha256 563c6e1c26760d4c88dc0ff7670230864fb24bc73108441c77d88fe1414e7be0 ocr_pages [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+202003_6251_AI1.pdf sha256 eee5111324efaad49040373ba820058aabee5d304f43c3f414cc1ec70d83980e ocr_pages [3, 4, 5, 6, 7, 8, 9]
+202103_6251_AI1.pdf sha256 a7323a5aa94814a2daf1c43801a5e64b7781fce8f204c18da60ff117c2aa10c9 ocr_pages [3, 4, 5, 6, 7, 8, 9]
+slice 0 完成
