@@ -1,0 +1,1 @@
+{"msg": "success", "status": 200, "data": [{"date": "2026-06-30", "stock_id": "7711", "before_price": 324.0, "after_price": 315.01, "stock_and_cache_dividend": 8.987093, "stock_or_cache_dividend": "息", "max_price": 346.5, "min_price": 284.0, "open_price": 315.0, "reference_price": 315.01}]}
