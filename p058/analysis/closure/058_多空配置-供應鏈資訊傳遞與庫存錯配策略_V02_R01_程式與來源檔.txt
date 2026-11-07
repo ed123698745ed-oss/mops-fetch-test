@@ -1,0 +1,2548 @@
+058 多空配置-供應鏈資訊傳遞與庫存錯配策略｜V02／R01 程式與來源檔（含快篩與盤點程式；兼作結案存檔②，Elon 手冊 V29 第 6-D 節）
+產生：2026-11-05 19:13（台灣時間）｜Elon
+共用統計函式：bt_stats 1.2（共用統計函式_bt_stats_v1.2.py，sha256 e99c85e9a9da8c593a727175cd5a0cc019d679552c75e8b1cef42fa62d5a20ee，本體不貼入）
+憑證：本檔不含任何金鑰或權杖；GitHub Actions 只引用平台內建 github.token。
+
+一、執行順序
+ 0. 可測性盤點與快篩（2026-11-04～05）：fetch_fm.py／fetch_fm2.py、s2_count*.py、s2_rev.py、liq.py（只數訊號、不算報酬）→ code/run_is.py＋code/stats_is.py（策略卡組合快篩）→ V058=T code/run_is.py＋code/stats_t.py（E-Test T 版快篩）
+ 1. 資料抓取（GitHub repo mops-fetch-test，Actions）：p058/fetch_ar.py（年報純度）、p058/fetch_fin.py（公開資訊觀測站 t164sb03/t164sb04 原始申報＋t57sb01 上傳時間＋更補正）、p058/fetch_ca.py（FinMind 股利、除權息結果、減資參考價）、p058/fetch_fm_t.py（T 版月營收與公司行動）
+ 2. 解析：code/parse_fin.py → fund_mops.csv（策略卡組合）、fund_mops_t.csv（T 版）
+ 3. 行情與融券表抽取：px_extract.py（策略卡組合）、code/px_extract_all.py（T 版）、code/margin_extract_all.py（R01 起含下游）
+ 4. 回測：code/run_fp.py（V058=T DIR=rev → T_rev_d2；V058=T DIR=orig → T_orig_d2；V058= DIR=orig → C_orig_d2），依賴 code/signals.py、code/engine.py、elon_tools.py、red_ratio.csv
+ 5. 統計：code/stats_fp.py（十項＋回撤三項）→ code/tables_fp.py（報告表、參數全表）→ code/diag_fp.py（診斷）→ code/report_fp.py（報告）→ code/check_fp.py（交件前自檢）
+
+二、來源
+ - 行情：證交所 MI_INDEX、櫃買每日收盤行情官方原始檔（sector-tracker repo archive/raw/twse、tpex，未還原）
+ - 融資融券：證交所 MI_MARGN、櫃買融資融券餘額（sector-tracker archive/raw/twse_margin、tpex_margin），以前一營業日表判斷
+ - 財報：公開資訊觀測站 https://mops.twse.com.tw t164sb03 資產負債表、t164sb04 綜合損益表、t57sb01 電子書上傳時間、更補正查詢
+ - 月營收：FinMind TaiwanStockMonthRevenue（2013-01 起合併口徑）；營收更正：mops-fetch-test merged/MOPS每日重大訊息_公告總表_YYYY.csv.gz（至 2026-10-12）
+ - 公司行動：FinMind TaiwanStockDividend（現金股利實額、配股、現增認購率）、TaiwanStockDividendResult（除權息參考價）、TaiwanStockCapitalReductionReferencePrice（減資恢復買賣日與官方漲跌停）
+ - 減資換股比與退還現金：公司重大訊息原文（見 red_ratio.csv 的 src 欄）
+ - 上市櫃日期：mops-fetch-test listing/上市櫃期間表.csv
+ - 成分：subt.json（Emit 題材分類表 sector-tracker config/themes.csv 現行回溯，D-058-20261105-1228-1）、seeds.csv（策略卡種子與純度判定，D-058-20261105-0029-1、1121-1、1121-2）
+
+三、輸入檔 sha256
+ - subt.json  aa358b59bd76ee6879e911af9f68bba81fa91add233772681de82c4cc9c83bbb
+ - seeds.csv  16bcc31cafee826ab94056997cfa03b278ed1ae5228a3567583e6a774253ce1a
+ - red_ratio.csv  2a9de3b082d669be89844023f505df45c44bc250ca06b20228d1f9af79dd3352
+ - margin_all.csv  89c6a63e5e6d7363de4275fa940624b0ccf17af6b3e291618c5f2b6dfce0da1f
+ - margin_up.csv  a013e04652d2e1dcdf189d597e849018fcf11c1c1c95556a03d88cfb884ef209
+ - px_all.csv  30bc1d0c504295d5cc13d5cd508105bfb0abdbac53d1b568abeeb2eb7c6536cc
+ - px_seeds.csv  2c8b367f52bca92751c45488ed9b3dc61b0d8ad3657d56b202fc086cd4c4e640
+ - fund_mops.csv  3d62dfc2c6310f8fa52ab6a16dd46633667871320e88ca53209bc94940971f24
+ - fund_mops_t.csv  248b76e3097ad505c31eeb31ad68a243c040f06de44a4459d7959d3314309a54
+ - 058_樣本切點凍結紀錄_20261105.json  600819cb5ed05afe12c59b8f4ac7bf10d65796e621b472529c5c28d5143f9703
+ - 058_正式策略包_樣本外檢定事前登記_20261105.json  c94374f74e23013fead925e643815d85d8033913e357a87d8239659e6acdf2b3
+
+
+====================================================================================================
+檔案：code/signals.py｜sha256 c00db6d5938316b5c8f815b784994d4d875d8e178975ea74333b01a412f9ac21
+====================================================================================================
+# 058 S2 訊號（時點版）：公開資訊觀測站原始申報＋電子書上傳時間＋更補正；月營收 FinMind＋營收更正重訊
+import json, csv, collections, calendar, datetime as dt
+W='/home/claude/w058'
+# ---- 子鏈與成員（依 D-058-20261105-0029-1、1121-1、1121-2；純度判定見盤點報告與 purity 檔）----
+SUB={'1a':{'U':['2383','6274','6213'],'D':['2368','3044','2313']},
+     '1b':{'U':['2368','3044','2313'],'D':['2382','3231','6669']},
+     '2a':{'U':['6121','3211'],'D':['2324','2356']},
+     '2b':{'U':['6412','6282'],'D':['2324','2356']},
+     '2c':{'U':['3324','3338'],'D':['2324','2356']},
+     '2d':{'U':['2324','2356'],'D':['2357']},
+     '6':{'U':['2379'],'D':['3596','6285']},
+     '7a':{'U':['3234','3081'],'D':['4979','4908']},
+     '8':{'U':['1452'],'D':['1476','1477','4438']},
+     '9':{'U':['5306'],'D':['9921','9914']}}
+CHAIN={'1a':1,'1b':1,'2a':2,'2b':2,'2c':2,'2d':2,'6':6,'7a':7,'8':8,'9':9}
+import os
+V=os.environ.get('V058','')
+if V=='T':   # E-Test T 版（D-058-20261105-1228-1）：Emit 題材分類表成分
+    SUB=json.load(open(f'{W}/subt.json'))
+    CHAIN={'T1a':1,'T1b':1,'T2a':2,'T2b':2,'T2c':2,'T3':3,'T6':6,'T7':7,'T8':8,'T9':9}
+# ---- 月營收 ----
+rev={}
+for c in {x for s in SUB.values() for x in s['D']}:
+    p=f'{W}/raw_finmind/MonthRevenue_{c}.json'
+    if not os.path.exists(p): p=f'/home/claude/mops-fetch-test/out/p058/rev/TaiwanStockMonthRevenue_{c}.json'
+    d=json.load(open(p))['data']
+    rev[c]={(x['revenue_year'],x['revenue_month']):x['revenue'] for x in d if x['revenue_year']>=2013}
+def add(ym,k):
+    t=ym[0]*12+ym[1]-1+k; return (t//12,t%12+1)
+def G3(c,ym):
+    r=rev[c]; num=[r.get(add(ym,-i)) for i in range(3)]; den=[r.get(add(ym,-12-i)) for i in range(3)]
+    if None in num or None in den or sum(den)<=0: return None
+    return sum(num)/sum(den)-1
+# 營收更正（公告日前的截點不得使用涵蓋更正月份的 G3）
+RC={'4967':[((2013,1),(2013,6),'20130822'),((2014,1),(2014,1),'20140210'),((2014,1),(2014,12),'20150430'),((2016,1),(2016,12),'20170412'),((2017,1),(2017,12),'20180424')],
+    '2368':[((2015,7),(2015,7),'20160808')],'4438':[((2015,6),(2015,7),'20161019'),((2017,3),(2017,3),'20180410')],'4979':[((2019,9),(2019,9),'20191014')],
+    '3363':[((2019,12),(2019,12),'20200109')],'6274':[((2025,4),(2025,7),'20250813')]}
+if V=='T':
+    RC.update({'3167':[((2013,1),(2013,3),'20130510')],'8213':[((2013,5),(2013,5),'20130611'),((2014,12),(2014,12),'20150115')],
+      '6191':[((2013,9),(2013,9),'20131031')],'5469':[((2013,9),(2013,9),'20131031')],'3704':[((2013,10),(2013,10),'20131112')],
+      '6442':[((2014,1),(2014,1),'20140310')],'8088':[((2014,6),(2014,6),'20140710')],'2332':[((2014,1),(2014,9),'20141110')],
+      '6451':[((2016,8),(2016,8),'20160909'),((2020,10),(2020,10),'20201110')],'3706':[((2020,6),(2020,6),'20200806')],
+      '2317':[((2021,12),(2021,12),'20220210')],'3135':[((2022,4),(2022,6),'20220810'),((2022,10),(2024,12),'20250317')],
+      '8933':[((2022,12),(2022,12),'20230313'),((2023,6),(2023,6),'20230810'),((2023,9),(2023,9),'20231110'),((2023,1),(2023,11),'20231213'),((2023,12),(2023,12),'20240312'),((2024,3),(2024,3),'20240503')],
+      '2376':[((2023,5),(2023,5),'20230609')],'3163':[((2020,12),(2020,12),'20210111')]})
+def rev_unverified(c,ym,cut):
+    months=[add(ym,-i) for i in range(5)]+[add(ym,-12-i) for i in range(5)]
+    for a,b,d in RC.get(c,[]):
+        if cut<d and any(a<=m<=b for m in months): return True
+    return False
+# ---- 季報 ----
+F={}
+for r in csv.DictReader(open(f'{W}/fund_mops{"_t" if V=="T" else ""}.csv',encoding='utf-8')):
+    F[(r['code'],int(r['y']),int(r['q']))]=r
+def days_q(y,q): return [90+calendar.isleap(y),91,92,92][q-1]
+def prevq(y,q): return (y,q-1) if q>1 else (y-1,4)
+def dio(c,y,q):
+    a,b=F.get((c,y,q)),F.get((c,)+prevq(y,q))
+    if not a or not b or not a['inv'] or not b['inv'] or not a['cogs_q']: return None
+    k=float(a['cogs_q'])
+    if k<=0: return None
+    return (float(a['inv'])+float(b['inv']))/2/k*days_q(y,q)
+def latest_q(c,cutdt):
+    best=None
+    for (cc,y,q),r in F.items():
+        if cc!=c or not r['upload']: continue
+        if dt.datetime.strptime(r['upload'],'%Y-%m-%d %H:%M')<=cutdt and (best is None or (y,q)>best): best=(y,q)
+    return best
+def used_reports(y,q):
+    rs=[(y,q),prevq(y,q),(y-1,q),prevq(y-1,q)]
+    if q==4: rs+= [(y,3),(y-1,3)]
+    return rs
+def fin_status(c,cutdt):
+    """回傳 (累庫 True/False/None, 說明)"""
+    lq=latest_q(c,cutdt)
+    if not lq: return None,'無已公告季報'
+    y,q=lq; qend=dt.datetime(y,3*q,[31,30,30,31][q-1])
+    if (cutdt-qend).days>180: return None,'季報距截點>180日'
+    for (yy,qq) in used_reports(y,q):
+        r=F.get((c,yy,qq))
+        if not r or not r['upload']: return None,f'缺{yy}Q{qq}'
+        if dt.datetime.strptime(r['upload'],'%Y-%m-%d %H:%M')>cutdt: return None,f'{yy}Q{qq}截點時未公告'
+        for d in [x for x in r['corr_dates_flag'].split(';') if x]:
+            if dt.datetime.strptime(d,'%Y%m%d')>cutdt: return None,f'{yy}Q{qq}截點後更補正({d})'
+    a,b=dio(c,y,q),dio(c,y-1,q)
+    if a is None or b is None: return None,'DIO無法計算'
+    return a>b, f'{y}Q{q} DIO {a:.1f} vs {b:.1f}'
+
+
+====================================================================================================
+檔案：code/engine.py｜sha256 dc5b966ebce432717e2cf292ae80e333d6d48ad9b52345cf41f3bae74ecd9dd5
+====================================================================================================
+# 058 S2 快篩引擎：建籃、可成交檢查（L1＋L2）、出場順延、固定股數加實得現金報酬
+import json, csv, sys, collections, datetime as dt
+from decimal import Decimal
+sys.path.insert(0,'/home/claude/w058/code'); sys.path.insert(0,'/home/claude/w058')
+import signals as S
+import elon_tools as ET
+W='/home/claude/w058'
+# ---- 行情 ----
+PX=collections.defaultdict(dict); MKT={}
+for r in csv.DictReader(open(f'{W}/{"px_all" if S.V=="T" else "px_seeds"}.csv',encoding='utf-8')):
+    o=r['open']
+    PX[r['code']][r['date']]=dict(o=float(o) if o not in ('',None) else None,h=float(r['high']) if r['high'] else None,
+        l=float(r['low']) if r['low'] else None,c=float(r['close']) if r['close'] else None,v=float(r['vol'] or 0),a=float(r['amt'] or 0),mkt=r['mkt'])
+TD=sorted({d for c in PX for d in PX[c]})          # 種子聯集交易日
+TI={d:i for i,d in enumerate(TD)}
+LIST={r['公司代號']:r['初次上市櫃日'].replace('-','') for r in csv.DictReader(open('/home/claude/mops-fetch-test/listing/上市櫃期間表.csv',encoding='utf-8-sig'))}
+def nxt(d): 
+    for x in TD:
+        if x>d: return x
+def prev_trade(c,d):
+    i=TI[d]-1
+    while i>=0:
+        x=PX[c].get(TD[i])
+        if x and x['c']: return TD[i],x
+        i-=1
+    return None,None
+# ---- 公司行動 ----
+LIMOFF={}
+import os
+def cap(ds,c):
+    for p in (f'{W}/raw_ca/{ds}_{c}.json',f'/home/claude/mops-fetch-test/out/p058/ca/{ds}_{c}.json',f'/home/claude/mops-fetch-test/out/p054/px/{ds}_{c}.json'):
+        if os.path.exists(p): return p
+    return f'{W}/raw_ca/{ds}_{c}.json'
+EV=collections.defaultdict(list); SEO=collections.defaultdict(list); RED=collections.defaultdict(list); REF={}
+for c in PX:
+    try: dv=json.load(open(cap('TaiwanStockDividend',c)))['data']
+    except FileNotFoundError: dv=[]
+    for x in dv:
+        cash=(x.get('CashEarningsDistribution') or 0)+(x.get('CashStatutorySurplus') or 0)
+        stk=((x.get('StockEarningsDistribution') or 0)+(x.get('StockStatutorySurplus') or 0))/10
+        if cash>0 and x.get('CashExDividendTradingDate'): EV[c].append(dict(date=x['CashExDividendTradingDate'].replace('-',''),cash=cash,src=f"FinMind Dividend {x['date']}"))
+        if stk>0 and x.get('StockExDividendTradingDate'): EV[c].append(dict(date=x['StockExDividendTradingDate'].replace('-',''),stock=stk,src=f"FinMind Dividend {x['date']}"))
+        if (x.get('CashIncreaseSubscriptionRate') or 0)>0:
+            dd=(x.get('StockExDividendTradingDate') or '').replace('-','')
+            SEO[c].append(dict(date=dd,rate=x['CashIncreaseSubscriptionRate'],px=x.get('CashIncreaseSubscriptionpRrice'),ann=x.get('date')))
+    try: rr=json.load(open(cap('TaiwanStockDividendResult',c)))['data']
+    except FileNotFoundError: rr=[]
+    for x in rr: REF[(c,x['date'].replace('-',''))]=x['reference_price']
+    try: cr=json.load(open(cap('TaiwanStockCapitalReductionReferencePrice',c)))['data']
+    except FileNotFoundError: cr=[]
+    for x in cr:
+        dd=x['date'].replace('-',''); RED[c].append(dd); REF[(c,dd)]=x.get('OpeningReferencePrice') or x.get('PostReductionReferencePrice')
+        if x.get('LimitUp') and x.get('LimitDown'): LIMOFF[(c,dd)]=(float(x['LimitUp']),float(x['LimitDown']))
+def ref_price(c,d):
+    if (c,d) in REF and REF[(c,d)]: return float(REF[(c,d)]),'官方參考價'
+    pd_,x=prev_trade(c,d)
+    return (x['c'],'前一成交日收盤') if x else (None,'')
+def limits(c,d):
+    if (c,d) in LIMOFF: return LIMOFF[(c,d)]   # 減資恢復買賣日用官方漲跌停
+    ref,src=ref_price(c,d)
+    if ref is None: return None,None
+    lst=LIST.get(c,'')
+    if lst and TI.get(d,0)-TI.get(max([x for x in TD if x<=lst] or [TD[0]]),0)<5: return None,None   # 新上市前五日無漲跌幅
+    return ET.limit_prices(ref,f"{d[:4]}-{d[4:6]}-{d[6:]}")
+# ---- 融資融券（空方）----
+MG={}
+for r in csv.DictReader(open(f'{W}/{"margin_all" if S.V=="T" else "margin_up"}.csv',encoding='utf-8')):
+    if r['listed']=='1': MG[(r['code'],r['date'])]=(r['note'],r['short_limit'])
+MG_DAYS=sorted({r for (_,r) in MG})
+def short_ok(c,d):
+    """L2：前一營業日融資融券表（備註表明次一營業日狀況）列為標的、註記無 X 或 !、券限額>0；平盤下放空規則期 B～E"""
+    pdays=[x for x in TD if x<d]; p=pdays[-1]
+    m=MG.get((c,p))
+    if not m: return False,'前一營業日融資融券表未列'
+    note,lim=m
+    if 'X' in note or '!' in note: return False,f'停止融券({note.strip()})'
+    try:
+        if float(str(lim).replace(',',''))<=0: return False,'券限額0'
+    except ValueError: pass
+    x=PX[c].get(d); ref,_=ref_price(c,d)
+    if x and x['o'] is not None and ref is not None and x['o']<ref-1e-9:
+        if '20150824'<=d<='20150918': return False,'規則期C全面禁止平盤下融券'
+        pd_,px_=prev_trade(c,d)
+        up,dn=limits(c,pd_) if pd_ else (None,None)
+        if px_ and (dn is not None and abs(px_['c']-dn)<1e-9 or px_['v']==0): return False,'規則期B前一日跌停或無成交，平盤下不得融券'
+        if ('20200320'<=d<='20200609' or '20221024'<=d<='20230223'):
+            pp,ppx=prev_trade(c,pd_)
+            if ppx and px_ and px_['c']/ppx['c']-1<=-0.035: return False,'規則期D/E前一日跌幅≥3.5%，不得低於前收融券'
+    return True,''
+# ---- 成交檢查 ----
+def can_enter(c,d,side):
+    x=PX[c].get(d)
+    if not x or x['o'] is None or x['v']==0: return False,'進場日無成交'
+    up,dn=limits(c,d)
+    if side=='L' and up is not None and abs(x['o']-up)<1e-9: return False,'開盤漲停，無法證實買進成交'
+    if side=='S':
+        if dn is not None and abs(x['o']-dn)<1e-9: return False,'開盤跌停，無法證實放空成交'
+        ok,why=short_ok(c,d)
+        if not ok: return False,why
+    return True,''
+def exit_day(c,d0,side):
+    """d0 預定出場日；空方回補遇開盤漲停、多方賣出遇開盤跌停、無成交→順延至可成交日開盤"""
+    i=TI[d0]; delay=0
+    while i<len(TD):
+        d=TD[i]; x=PX[c].get(d)
+        if x and x['o'] is not None and x['v']>0:
+            up,dn=limits(c,d)
+            blocked=(side=='L' and dn is not None and abs(x['o']-dn)<1e-9) or (side=='S' and up is not None and abs(x['o']-up)<1e-9)
+            if not blocked: return d,x['o'],delay
+        i+=1; delay+=1
+    return None,None,delay
+def leg_return(c,ed,ep,xd,xp):
+    evs=[dict(date=pd_dt(e['date']),cash=e.get('cash',0),stock=e.get('stock',0)) for e in EV[c]]
+    return ET.share_return(pd_dt(ed),ep,pd_dt(xd),xp,evs)
+def pd_dt(s): return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+def gaps(c,ed,xd):
+    g=[]
+    for s in SEO[c]:
+        if s['date'] and ed<s['date']<=xd: g.append(f"現增除權{s['date']}（認購率{s['rate']}‰）")
+    for r in RED[c]:
+        if ed<r<=xd: g.append(f'減資恢復買賣{r}')
+    return g
+
+
+====================================================================================================
+檔案：code/run_fp.py｜sha256 f807449ea65ec88b75f29260916992055b9654806878ae774bd25f652eb4da5d
+====================================================================================================
+# 058 正式策略包 V02／R01：樣本內＋樣本外（事前登記見 058_正式策略包_樣本外檢定事前登記_20261105.json）
+# 用法：V058=''（策略卡組合）或 'T'（E-Test T 版）；DIR=orig（多減速下游、空累庫上游）或 rev（多累庫上游、空減速下游）；DECEL=連續減速次數（主值 2）
+import sys, os, csv, collections, datetime as dt, statistics as st
+sys.path.insert(0,'/home/claude/w058/code'); import signals as S, engine as E
+DIR=os.environ.get('DIR','orig'); DECEL=int(os.environ.get('DECEL','2')); TAG=os.environ.get('TAG','')
+IS_FIRST,IS_LAST='20140615','20220715'; ISO=('20220815','20220915'); OOS_FIRST,OOS_LAST='20221015','20260915'
+cuts=[f"{y}{m:02d}15" for y in range(2014,2027) for m in range(1,13) if IS_FIRST<=f"{y}{m:02d}15"<=OOS_LAST and f"{y}{m:02d}15" not in ISO]
+if os.environ.get('ISONLY'): cuts=[c for c in cuts if c<=IS_LAST]   # 除錯用：只跑樣本內
+def sample(cut):
+    if cut<=IS_LAST: return '樣本內'
+    return '樣本外'
+def latest(cut): return '20251015'<=cut<=OOS_LAST   # 最新年度＝樣本外最後 12 批（樣本外子集，非另一次檢定）
+# ---- 減資換股比與每股退還現金：只用公司重大訊息原文（red_ratio.csv）；查無者該腿列未完成 ----
+RR={}
+if os.path.exists('/home/claude/w058/red_ratio.csv'):
+    for r in csv.DictReader(open('/home/claude/w058/red_ratio.csv',encoding='utf-8')):
+        RR[(r['code'],r['date'])]=(float(r['swap']),float(r['refund']),r['src'])
+def leg_events(c):
+    evs=[dict(date=E.pd_dt(e['date']),cash=e.get('cash',0),stock=e.get('stock',0)) for e in E.EV[c]]
+    for d in E.RED[c]:
+        if (c,d) in RR: sw,rf,_=RR[(c,d)]; evs.append(dict(date=E.pd_dt(d),swap=sw,refund=rf))
+    return evs
+def leg_return(c,ed,ep,xd,xp): return E.ET.share_return(E.pd_dt(ed),ep,E.pd_dt(xd),xp,leg_events(c))
+def leg_flags(c,ed,xd):
+    gap=[];flag=[];seo=[]
+    for s in E.SEO[c]:
+        if s['date'] and ed<s['date']<=xd: flag.append(f"現增除權{s['date']}（不認購）"); seo.append(s['date'])
+    for r in E.RED[c]:
+        if ed<r<=xd:
+            if (c,r) in RR: flag.append(f"減資恢復買賣{r}（換股比{RR[(c,r)][0]}、退還{RR[(c,r)][1]}元，{RR[(c,r)][2]}）")
+            else: gap.append(f'減資恢復買賣{r}換股比未取得')
+    return gap,flag,seo
+def elig(c,cut):
+    sd=max(x for x in E.TD if x<=cut); i=E.TI[sd]; win=E.TD[i-20:i]
+    x=E.PX[c].get(sd); lst=E.LIST.get(c,'')
+    if not x or not x['c']: return False,'訊號日無收盤'
+    if lst and lst>win[0]: return False,'未滿上市櫃20日'
+    if x['c']<10: return False,'收盤<10元'
+    a=sum(E.PX[c][d]['a'] if d in E.PX[c] else 0 for d in win)/20
+    if a<5e7: return False,'20日均額<5000萬'
+    return True,''
+legs=[]; baskets=[]; sigrows=[]; busy={}
+for cut in cuts:
+    y,m=int(cut[:4]),int(cut[4:6]); cutdt=dt.datetime(y,m,15,23,59)
+    rm=(y,m-1) if m>1 else (y-1,12)
+    entry=E.nxt(cut); nextcut=f"{y+(m==12)}{(m%12)+1:02d}15"; xt=E.nxt(nextcut)
+    role={}
+    for sub,mem in S.SUB.items():
+        for c in mem['D']:
+            ok,why=elig(c,cut); g=[S.G3(c,S.add(rm,-i)) for i in range(DECEL+1)]
+            if not ok: st_=None; why2=why
+            elif None in g: st_=None; why2='G3不足'
+            elif S.rev_unverified(c,rm,cut): st_=None; why2='營收版本未驗證'
+            else:
+                st_=all(g[i]<g[i+1] for i in range(DECEL)); why2=('G3 '+'<'.join(f'{v:.4f}' for v in g)) if st_ else f'G3未連{DECEL}次減速'
+            role[(sub,'D',c)]=(st_,why2)
+        for c in mem['U']:
+            ok,why=elig(c,cut)
+            if not ok: role[(sub,'U',c)]=(None,why); continue
+            a,why2=S.fin_status(c,cutdt); role[(sub,'U',c)]=(a,why2)
+    both=set()
+    for ch in set(S.CHAIN.values()):
+        subs=[s for s in S.SUB if S.CHAIN[s]==ch]
+        dset={c for s in subs for c in S.SUB[s]['D'] if role[(s,'D',c)][0]}
+        uset={c for s in subs for c in S.SUB[s]['U'] if role[(s,'U',c)][0]}
+        both|={(ch,c) for c in dset&uset}
+    for (sub,r,c),(v,why) in role.items():
+        sigrows.append(dict(cut=cut,sub=sub,role=r,code=c,signal=v,why=why,both_role_excluded=(S.CHAIN[sub],c) in both))
+    for sub,mem in S.SUB.items():
+        ch=S.CHAIN[sub]
+        Dn=[c for c in mem['D'] if role[(sub,'D',c)][0] and (ch,c) not in both]
+        Up=[c for c in mem['U'] if role[(sub,'U',c)][0] and (ch,c) not in both]
+        L,Sh=(Dn,Up) if DIR=='orig' else (Up,Dn)
+        rec=dict(cut=cut,sample=sample(cut),latest=latest(cut),sub=sub,entry=entry,longs=' '.join(L),shorts=' '.join(Sh),status='',reason='',
+                 ret=None,ret_cash=None,ret_loss=None,rl=None,rs=None,exit='',hold=None,gap='',flag='')
+        if not L or not Sh: rec['status']='無訊號'; baskets.append(rec); continue
+        if busy.get(sub) and busy[sub]>entry: rec['status']='暫停'; rec['reason']=f'前期部位未平倉至{busy[sub]}'; baskets.append(rec); continue
+        fail=[]
+        for side,cs in (('L',L),('S',Sh)):
+            for c in cs:
+                ok,why=E.can_enter(c,entry,side)
+                if not ok: fail.append(f'{c}{side}:{why}')
+        if fail: rec['status']='取消'; rec['reason']='；'.join(fail); baskets.append(rec); continue
+        R={'L':[],'S':[]}; RC={'L':[],'S':[]}; RLs={'L':[],'S':[]}; xs=[]; gaps=[]; flags=[]
+        for side,cs in (('L',L),('S',Sh)):
+            for c in cs:
+                ep=E.PX[c][entry]['o']; xd,xp,dl=E.exit_day(c,xt,side)
+                if xd is None:
+                    gaps.append(f'{c}無出場價'); legs.append(dict(cut=cut,sample=sample(cut),sub=sub,side=side,code=c,entry=entry,entry_px=ep,exit='',exit_px='',delay=dl,hold='',ret='',ret_cash='',ret_loss='',gap='無出場價',flag=''))
+                    continue
+                g,f,seo=leg_flags(c,entry,xd)
+                r=None if g else leg_return(c,entry,ep,xd,xp)
+                rc=rl_=r
+                if seo and r is not None:
+                    d0=min(seo); pdd=max(x for x in E.TD if x<d0 and E.PX[c].get(x) and E.PX[c][x]['c'])
+                    rc=leg_return(c,entry,ep,pdd,E.PX[c][pdd]['c'])   # 留現金：除權前一交易日收盤出清
+                    rl_=-1.0 if side=='L' else 1.0                      # 全損：該腿損失全部名目
+                legs.append(dict(cut=cut,sample=sample(cut),sub=sub,side=side,code=c,entry=entry,entry_px=ep,exit=xd,exit_px=xp,delay=dl,
+                                 hold=E.TI[xd]-E.TI[entry],ret=r,ret_cash=rc,ret_loss=rl_,gap='；'.join(g),flag='；'.join(f)))
+                xs.append(xd)
+                if g: gaps+=[f'{c}{x}' for x in g]
+                else: R[side].append(r); RC[side].append(rc); RLs[side].append(rl_)
+                if f: flags+=[f'{c}{x}' for x in f]
+        rec['exit']=max(xs) if xs else ''; rec['hold']=E.TI[rec['exit']]-E.TI[entry] if xs else None
+        busy[sub]=rec['exit'] or busy.get(sub); rec['flag']='；'.join(flags)
+        if gaps: rec['status']='未完成'; rec['gap']='；'.join(gaps)
+        else:
+            rec['status']='成交'; rec['rl']=st.mean(R['L']); rec['rs']=st.mean(R['S']); rec['ret']=(rec['rl']-rec['rs'])/2
+            rec['ret_cash']=(st.mean(RC['L'])-st.mean(RC['S']))/2; rec['ret_loss']=(st.mean(RLs['L'])-st.mean(RLs['S']))/2
+        baskets.append(rec)
+name=f"{'T' if S.V=='T' else 'C'}_{DIR}_d{DECEL}{TAG}"
+OUT=f'/home/claude/w058/out_fp/{name}'; os.makedirs(OUT,exist_ok=True)
+def dump(fn,rows):
+    if not rows: return
+    cols=list(rows[0].keys()); w=csv.DictWriter(open(f'{OUT}/{fn}','w',encoding='utf-8',newline=''),fieldnames=cols); w.writeheader(); w.writerows(rows)
+dump('signals.csv',sigrows); dump('baskets.csv',baskets); dump('legs.csv',legs)
+c=collections.Counter((b['sample'],b['status']) for b in baskets); print(name,sorted(c.items()))
+
+
+====================================================================================================
+檔案：code/stats_fp.py｜sha256 9fe99a5c89e576979dca4ca6f42ddebf5f80664995a278a12386022ccf6c3267
+====================================================================================================
+# 058 正式策略包 V02／R01 統計：十項＋回撤三項（bt_stats 1.2），樣本內／樣本外／最新年度並列
+import sys, os, pickle, pandas as pd, numpy as np
+sys.path.insert(0,'/home/claude/w058'); sys.path.insert(0,'/home/claude/w058/code')
+os.environ['V058']='T'
+import elon_tools as ET, engine as E      # 只用 E.TI（交易日曆索引）
+bt=ET.load_bt_stats('/home/claude/w058/共用統計函式_bt_stats_v1.2.py'); assert ET.baseline_check(bt)
+NSUB=10; O='/home/claude/w058/out_fp'
+def iso(d): d=str(d); return f"{d[:4]}-{d[4:6]}-{d[6:]}"
+def mk(df,combo,retcol,etest,cluster=False):
+    df=df.reset_index(drop=True)
+    return pd.DataFrame({'trade_id':[f'{combo}|{s}|{c}|{u}' for s,c,u in zip(df['sample'],df.cut,df['sub'] if 'sub' in df else ['M']*len(df))],
+        'combo':combo,'is_etest':etest,'symbol':df['sub'].values if 'sub' in df else 'M',
+        'info_time':[iso(c)+' 23:59' for c in df.cut],'entry_time':[iso(e)+' 09:00' for e in df.entry],'entry_date':[iso(e) for e in df.entry],
+        'entry_px':np.nan,'exit_date':[iso(e) for e in df.exit],'exit_px':np.nan,'ret':df[retcol].astype(float).values,'hold_days':df.hold.astype(int).values,
+        'cluster':(df.cut.values if cluster else None),'sample':df['sample'].values,'excluded_reason':None,'latest':df['latest'].values})
+def series(name,prefix,etest,subs):
+    B=pd.read_csv(f'{O}/{name}/baskets.csv',dtype={'cut':str,'entry':str,'exit':str})
+    B['latest']=B['latest'].astype(str)=='True'
+    T=B[B.status=='成交'].copy(); inc=set(B[B.status=='未完成'].cut)
+    g=T.groupby('cut')
+    M=pd.DataFrame({'cut':g.size().index,'n':g.size().values,'sample':g['sample'].first().values,'latest':g.latest.first().values,
+        'entry':g.entry.first().values,'exit':g.exit.max().values,'hold':[E.TI[x]-E.TI[e] for e,x in zip(g.entry.first(),g.exit.max())],
+        'ret':g.ret.sum().values/NSUB,'ret_eq':g.ret.mean().values,'ret_cash':g.ret_cash.sum().values/NSUB,'ret_loss':g.ret_loss.sum().values/NSUB})
+    M=M[(M.n>=2)&(~M.cut.isin(inc))].copy()
+    tabs={f'{prefix}-M':mk(M,f'{prefix}-M','ret',etest),f'{prefix}-Meq':mk(M,f'{prefix}-Meq','ret_eq',etest),
+          f'{prefix}-P':mk(T,f'{prefix}-P','ret',etest,True),f'{prefix}-L':mk(T.assign(x=T.rl),f'{prefix}-L','x',etest,True),
+          f'{prefix}-S':mk(T.assign(x=-T.rs),f'{prefix}-S','x',etest,True)}
+    if prefix=='TR':
+        tabs['TR-M留現金']=mk(M,'TR-M留現金','ret_cash',etest); tabs['TR-M全損']=mk(M,'TR-M全損','ret_loss',etest)
+    for s in subs: tabs[f'{prefix}-{s}']=mk(T[T['sub']==s],f'{prefix}-{s}','ret',etest)
+    return tabs,B,M
+TS=['T1a','T1b','T2a','T2b','T2c','T3','T6','T7','T8','T9']; CS=['1a','1b','2a','2b','2c','2d','6','7a','8','9']
+ALL={}; RAW={}
+for name,prefix,etest,subs in (('T_rev_d2','TR',True,TS),('T_orig_d2','TO',True,TS),('C_orig_d2','C',False,CS)):
+    tabs,B,M=series(name,prefix,etest,subs); ALL.update(tabs); RAW[prefix]=(B,M)
+def periods(df):
+    a=df.copy(); l=df[df.latest].copy(); l['sample']='最新年度'; l['trade_id']=l.trade_id+'|L'
+    return pd.concat([a,l])
+rows=[];dds=[]
+for k,df in ALL.items():
+    d=periods(df)
+    if not len(d): continue
+    cu='批次' if d.cluster.notna().all() else None
+    t=ET.ten_table(d,bt,by=('combo','sample'),cluster_unit=cu); rows.append(t)
+    for s,gs in d.groupby('sample'):
+        if len(gs)>=2:
+            x=ET.dd_table(gs.assign(combo=k+'／'+s),bt,by=('combo',)); dds.append(x)
+R=pd.concat(rows); D=pd.concat(dds)
+R.to_csv(f'{O}/stats_fp.csv',index=False); D.to_csv(f'{O}/dd_fp.csv',index=False)
+pickle.dump((ALL,RAW),open(f'{O}/tabs_fp.pkl','wb'))
+pd.set_option('display.width',260); pd.set_option('display.max_columns',30); pd.set_option('display.max_rows',300)
+print(R[['combo／sample','樣本數','平均報酬','平均持有交易日數','單利年化','勝率','賠率R','凱利','標準差','t值','雙尾p']+[c for c in ['聚合單位數','聚合p'] if c in R]].to_string(index=False))
+print(D[['combo','最大回撤','最差三次回撤平均','最長回撤期筆數','最長回撤期日曆日','最長回撤期未回復','最長回撤期聚合單位數','需註記']].to_string(index=False))
+
+
+====================================================================================================
+檔案：code/tables_fp.py｜sha256 913e353afac0677538f8a1dbaaa7adfd23565cdd51072f876cbd46f1ac0f304c
+====================================================================================================
+# 產生報告用表格（十項＋聚合 p＋回撤三項），顯示精度；全精度見參數全表
+import pandas as pd, math, json
+R=pd.read_csv('/home/claude/w058/out_fp/stats_fp.csv'); D=pd.read_csv('/home/claude/w058/out_fp/dd_fp.csv')
+R['combo']=R['combo／sample'].str.split('｜').str[0]; R['sample']=R['combo／sample'].str.split('｜').str[1]
+D['combo_']=D['combo'].str.split('／').str[0]; D['sample']=D['combo'].str.split('／').str[1]
+X=R.merge(D[['combo_','sample','最大回撤','最差三次回撤平均','最長回撤期筆數','最長回撤期日曆日','最長回撤期未回復','最長回撤期聚合單位數','需註記','採計回撤段數']],left_on=['combo','sample'],right_on=['combo_','sample'],how='left')
+X.drop(columns=['combo_']).to_csv('/home/claude/w058/out_fp/參數全表_V02_R01.csv',index=False,encoding='utf-8-sig')
+pct=lambda v: 'N/A' if pd.isna(v) else f'{v*100:.2f}%'
+f4=lambda v: 'N/A' if pd.isna(v) else f'{v:.4g}'
+def dd(r):
+    if pd.isna(r['最長回撤期筆數']): return 'N/A（樣本數<2）'
+    if r['最長回撤期筆數']==0: return '無回撤'
+    s=f"{int(r['最長回撤期筆數'])}筆（{int(r['最長回撤期日曆日']):,}天"+('，未回復' if r['最長回撤期未回復'] in (True,'True') else '')+'）'
+    if r['需註記'] in (True,'True'): s+=f"〔{int(r['最長回撤期聚合單位數'])} 個批次〕"
+    return s
+def table(combos,samples=('樣本內','樣本外','最新年度'),names=None,agg=True):
+    hdr=['組合','期間','①樣本數','②平均報酬','③平均持有交易日','④單利年化','⑤勝率','⑥賠率R','⑦凱利','⑧標準差','⑨t值','⑩雙尾p']+(['聚合p（批次數）'] if agg else [])+['⑪最大回撤','⑫最差三次回撤平均','⑬最長回撤期']
+    rows=['|'+'|'.join(hdr)+'|','|'+'|'.join(['---']*len(hdr))+'|']
+    for c in combos:
+        for s in samples:
+            r=X[(X.combo==c)&(X['sample']==s)]
+            if not len(r): continue
+            r=r.iloc[0]
+            na=lambda v,why: f4(v) if not pd.isna(v) else f'N/A（{why}）'
+            R_=na(r['賠率R'],'無虧損筆' if r['勝率']==1 else '無獲利筆'); K_=na(r['凱利'],'R 為 N/A')
+            ag=[(f"{r['聚合p']:.4g}（{int(r['聚合單位數'])}）" if not pd.isna(r.get('聚合p',float('nan'))) else '不適用（每批一筆）')] if agg else []
+            mdd=pct(r['最大回撤']) if not pd.isna(r['最大回撤']) else 'N/A（樣本數<2）'
+            w3=pct(r['最差三次回撤平均']) if not pd.isna(r['最差三次回撤平均']) else 'N/A（樣本數<2）'
+            if not pd.isna(r.get('採計回撤段數',float('nan'))) and 0<r['採計回撤段數']<3: w3+=f"（僅 {int(r['採計回撤段數'])} 段）"
+            cells=[(names or {}).get(c,c),s,str(int(r['樣本數'])),pct(r['平均報酬']),f"{r['平均持有交易日數']:.2f}",pct(r['單利年化']),pct(r['勝率']),R_,K_,pct(r['標準差']),f4(r['t值']),f4(r['雙尾p'])]+ag+[mdd,w3,dd(r)]
+            rows.append('|'+'|'.join(cells)+'|')
+    return '\n'.join(rows)
+N={'TR-M':'TR-M 主組合','TR-Meq':'TR-Meq 已成交子鏈等權（描述）','TR-P':'TR-P 子鏈籃子層','TR-L':'TR-L 多方腿（累庫上游）','TR-S':'TR-S 空方腿（−減速下游報酬）',
+   'TR-M留現金':'TR-M 現增敏感度：留現金','TR-M全損':'TR-M 現增敏感度：全損',
+   'TO-M':'TO-M 主組合','TO-P':'TO-P 子鏈籃子層','TO-L':'TO-L 多方腿（減速下游）','TO-S':'TO-S 空方腿（−累庫上游報酬）',
+   'C-M':'C-M 主組合','C-P':'C-P 子鏈籃子層','C-L':'C-L 多方腿（減速下游）','C-S':'C-S 空方腿（−累庫上游報酬）'}
+T={}
+T['TRmain']=table(['TR-M'],names=N,agg=False)
+T['TRall']=table(['TR-Meq','TR-P','TR-L','TR-S'],names=N)
+T['TRseo']=table(['TR-M','TR-M留現金','TR-M全損'],names=N,agg=False)
+T['TRsub']=table([f'TR-T{x}' for x in ['1a','1b','2a','2b','2c','3','6','7','8','9']],agg=False)
+T['TO']=table(['TO-M','TO-P','TO-L','TO-S'],names=N)
+T['TOsub']=table([f'TO-T{x}' for x in ['1a','1b','2a','2b','2c','3','6','7','8','9']],agg=False)
+T['C']=table(['C-M','C-P','C-L','C-S'],names=N)
+T['Csub']=table([f'C-{x}' for x in ['1a','1b','2a','2b','2c','2d','6','7a','8','9']],agg=False)
+json.dump(T,open('/home/claude/w058/out_fp/tables.json','w'),ensure_ascii=False)
+print(T['TRmain']); print(T['TRseo']); print(T['TRall'][:1500])
+
+
+====================================================================================================
+檔案：code/diag_fp.py｜sha256 e5b060870f6887358e8a3a5b95e0b0a481dc162db28e2a4fc6d21f510c4a01c0
+====================================================================================================
+# 診斷（描述，不作通過判定）：逐年、逐一移除子鏈、前五大正貢獻、財報資料年齡、連續訊號段
+import sys, pickle, pandas as pd, numpy as np, collections
+sys.path.insert(0,'/home/claude/w058'); import elon_tools as ET
+bt=ET.load_bt_stats('/home/claude/w058/共用統計函式_bt_stats_v1.2.py')
+ALL,RAW=pickle.load(open('/home/claude/w058/out_fp/tabs_fp.pkl','rb'))
+B,M=RAW['TR']; NSUB=10
+def st(x):
+    t=pd.DataFrame({'ret':x,'hold_days':20}); r=bt.summarize_df(t,ret='ret',hold='hold_days'); return r.iloc[0]
+out=[]
+M['year']=M.cut.str[:4]
+for (s,y),g in M.groupby(['sample','year']):
+    r=st(g.ret.values); out.append(['逐年',s,y,len(g),g.ret.mean(),r['雙尾p'] if len(g)>1 else np.nan])
+T=B[B.status=='成交']; inc=set(B[B.status=='未完成'].cut)
+for s in sorted(T['sub'].unique()):
+    for smp in ('樣本內','樣本外'):
+        TT=T[(T['sub']!=s)&(T['sample']==smp)]; g=TT.groupby('cut'); n=g.size(); r=g.ret.sum()/NSUB
+        r=r[(n>=2)&(~r.index.isin(inc))]; q=st(r.values); out.append(['移除子鏈',smp,s,len(r),r.mean(),q['雙尾p']])
+for smp in ('樣本內','樣本外'):
+    g=M[M['sample']==smp]; pos=g.ret[g.ret>0].sort_values(ascending=False)
+    out.append(['前五大正貢獻占正報酬合計',smp,'',len(g),pos.head(5).sum()/pos.sum(),np.nan])
+    out.append(['前五大正貢獻占淨報酬合計',smp,'',len(g),pos.head(5).sum()/g.ret.sum() if g.ret.sum()!=0 else np.nan,np.nan])
+D=pd.DataFrame(out,columns=['項目','樣本','分組','批數','平均或占比','雙尾p'])
+D.to_csv('/home/claude/w058/out_fp/diag_TR.csv',index=False)
+pd.set_option('display.width',200); pd.set_option('display.max_rows',200); print(D.to_string(index=False))
+# 財報資料年齡與連續訊號段（上游＝本組合多方）
+S=pd.read_csv('/home/claude/w058/out_fp/T_rev_d2/signals.csv',dtype=str)
+u=S[(S.role=='U')&(S.signal=='True')]
+print('上游累庫訊號（股票月）',len(u))
+seg=0
+for (sub,c),g in u.groupby(['sub','code']):
+    cs=sorted(g.cut); prev=None
+    for x in cs:
+        y,m=int(x[:4]),int(x[4:6]); k=y*12+m
+        if prev is None or k!=prev+1: seg+=1
+        prev=k
+print('同子鏈同股連續訊號段',seg)
+
+
+====================================================================================================
+檔案：code/check_fp.py｜sha256 aad4db5b848212ac9a865c8cee10500507f5fb1ae185e8e0fb6bb5b660a78ff0
+====================================================================================================
+# 交件前自檢（elon-backtest selfcheck）：E-Test（TR、TO）與策略卡組合（C）分表各跑一次
+import sys, pickle, pandas as pd
+sys.path.insert(0,'/home/claude/w058'); import elon_tools as ET
+bt=ET.load_bt_stats('/home/claude/w058/共用統計函式_bt_stats_v1.2.py')
+ALL,RAW=pickle.load(open('/home/claude/w058/out_fp/tabs_fp.pkl','rb'))
+R=pd.read_csv('/home/claude/w058/out_fp/stats_fp.csv'); D=pd.read_csv('/home/claude/w058/out_fp/dd_fp.csv')
+txt=open(sys.argv[1]).read() if len(sys.argv)>1 else None
+def periods(df):
+    l=df[df.latest].copy(); l['sample']='最新年度'; l['trade_id']=l.trade_id+'|L'; return pd.concat([df,l])
+ok=True
+for et,pre in ((True,('TR-','TO-')),(False,('C-',))):
+    for cu in ('批次',None):
+        ks=[k for k in ALL if k.startswith(pre) and ((ALL[k].cluster.notna().all())==(cu is not None))]
+        t=pd.concat([periods(ALL[k]) for k in ks]).drop(columns='latest')
+        rep=R[R['combo／sample'].str.split('｜').str[0].isin(ks)].copy()
+        dd=D.copy(); dd['combo／sample']=dd['combo'].str.replace('／','｜',n=1); dd=dd[dd['combo／sample'].str.split('｜').str[0].isin(ks)]
+        res=ET.selfcheck(t,bt,reported=rep,reported_dd=dd,by=('combo','sample'),cluster_unit=cu,etest=et,report_text=txt,
+                         split=('2022-08-16','2022-10-17'),current_r='R01')
+        print('==',('E-Test' if et else '策略卡'),cu); ok&=ET.print_check(res)
+print('ALL OK' if ok else 'HAS FAIL')
+
+
+====================================================================================================
+檔案：code/report_fp.py｜sha256 050701d8680134d64d2126b76986443a033dda0eba383dfe64b6b493ba266477
+====================================================================================================
+# 產生 V02／R01 回測結果（markdown → Google 文件）
+import json
+T=json.load(open('/home/claude/w058/out_fp/tables.json'))
+md=f"""# 058 多空配置-供應鏈資訊傳遞與庫存錯配策略｜V02／R01 回測結果
+
+Elon｜提交 2026-11-05｜策略卡 V02｜策略包 R01｜Elon 手冊 V27、研究預設口徑 V04｜bt_stats 1.2（sha256 e99c85e9…，selftest 與基準案例全部通過）
+
+## 決策摘要
+
+① 結果：事前登記的唯一主檢定「T 版反向主組合 TR-M」（做多存貨天數上升的上游、放空營收連兩次減速的下游）在樣本外 2022-10～2026-09 共 47 批，平均每批 −0.06%、雙尾 p 0.82，未通過（通過條件：平均＞0 且 p＜0.05）。樣本內同一組合 93 批 +0.41%、p 0.0018，樣本外完全消失。兩腿在樣本外都大幅變動但互相抵銷：多方上游平均 +3.42%，放空的下游也漲 3.59%（空方腿 −3.59%）。
+
+② 影響：本次回測沒有值得執行的候選組合。樣本內看到的「上游累庫後續漲、下游減速後不跌」只是 2018～2022 的現象，換到 2023 年後的 AI 多頭期，上下游一起漲，價差歸零。策略卡組合（年報純度版）與 T 版原方向在樣本外同樣不顯著（p 0.86、0.80）。依事前登記，未通過即不做敏感度測試、不送 Eve。
+
+③ 要 Ed 選：A. 結案（建議；依執行計畫「無候選結案」，不送 Eve）；B. 指定送審；C. 另行指定（例如等 2027 年資料做未來驗證）。
+
+## 核准依據（策略總表「決策紀錄」）
+
+- 關卡一：「待編號：058／20261029本對話全數核准」（第 131 列，核准 V02；正式編號與原訊息時刻待補，行政待同步）。
+- 報酬口徑：「待編號：058／20261104本對話報酬口徑V03」（第 256 列）；現增除權依研究預設口徑 V04（Ed 2026-11-05 核准）。
+- 可測性補正：D-058-20261105-0029-1（純度採年報產品占比、現行名單回溯）、-0029-2（放空做到 L1＋L2）、-1121-1（產品類別層級）、-1121-2（相鄰兩階段各成子鏈）。
+- E-Test 方向：D-058-20261105-1228-1（T 版題材分類成分）。
+- 快篩決定：D-058-20261105-1743-1（Ed 原文「Ｂ」：以 T 版反向組合做正式策略包，樣本外只開一次）。
+- 凍結紀錄：本資料夾《058_樣本切點凍結紀錄_20261105.json》（2026-11-05 02:51，計算任何報酬前，sha256 600819cb…）；《058_正式策略包_樣本外檢定事前登記_20261105.json》（2026-11-05 17:54，計算任何樣本外訊號與報酬前，sha256 c94374f7…）。
+- 原始對話：Claude「Ai Bot Team」專案 Elon 058 對話，Ed 訊息 2026-11-05 00:29、11:21、12:28、17:43。
+
+## ⓪ 符號與名詞定義
+
+| 符號／名詞 | 定義（與程式 run_fp.py、signals.py、engine.py 一致） |
+|---|---|
+| 截點 S | 每月 15 日 23:59（台灣時間）；m＝上一曆月 |
+| G3(m) | 下游三個月合計營收年增率＝[R(m)+R(m−1)+R(m−2)]÷[R(m−12)+R(m−13)+R(m−14)]−1；任一缺漏或分母≤0 無訊號；R 為 FinMind 合併月營收（2013-01 起）；截點後才公告更正、且更正涵蓋所用月份者，該股該期「營收版本未驗證」不用 |
+| 下游減速 | G3(m)＜G3(m−1)＜G3(m−2)（連兩次減速，DECEL＝2） |
+| DIO(q) | 上游存貨天數＝[(期末存貨 q＋期末存貨 q−1)÷2]÷單季營業成本 q×該季曆日數；Q4 單季成本＝全年減前三季累計 |
+| 上游累庫 | 截點前已上傳（電子書 t57sb01 上傳時間）的最新季報 q：DIO(q)＞DIO(q−4)；季末距截點≤180 日；截點後才公告涉及報表、存貨或成本的更補正者「版本未驗證」不用 |
+| 合格 | 訊號日（截點當日或之前最近交易日）未還原收盤≥10 元；訊號日前 20 個交易日平均成交金額≥5,000 萬（不含訊號日、含鉅額、無成交計 0）；已上市櫃滿 20 個交易日 |
+| 雙角色排除 | 同一條鏈同月同時符合下游減速與上游累庫者，兩邊皆排除 |
+| 子鏈 | T 版 10 條（T1a～T9，見 ②）；策略卡組合 10 條（1a～9） |
+| 方向 | TR（反向，主檢定）：做多上游累庫、放空下游減速；TO（T 版原方向）、C（策略卡組合）：做多下游減速、放空上游累庫 |
+| 進場 E | S 後第一個交易日開盤 |
+| 出場 X | 下一個 S 後第一個交易日開盤；多方遇開盤跌停、空方遇開盤漲停或無成交則順延至可成交日開盤 |
+| L1＋L2 | 進場日無成交、多方開盤漲停、空方開盤跌停、空方前一營業日融資融券表未列或註記 X／!、券限額 0、平盤下融券限制（規則期 B～E）任一成立 → 整籃取消、留現金 |
+| 暫停 | 子鏈前期部位尚未出場（順延）時，本期不建倉 |
+| 個股報酬 | 固定股數加實得現金：（出場持股×出場開盤價＋期間現金）÷進場開盤價−1；只計 E＜事件日≤X 的事件；現金股利用 FinMind 實額；減資用重大訊息原文的換股比與每股退還現金；現增除權視為不認購（股數不變） |
+| 子鏈籃子報酬 | （多方腿等權平均−空方腿標的等權平均）÷2 |
+| 未完成籃 | 有成分減資換股比查無或無出場價；不計報酬、不推估 |
+| M 主組合 | 每月至少兩條子鏈成交才成批；各子鏈固定 1/10 名目，未成交子鏈留現金；含未完成籃的月份不列入；一批一筆 |
+| Meq | 同月已成交子鏈等權平均（描述用） |
+| P／L／S | P＝全部成交籃（一籃一筆）；L＝多方腿平均報酬；S＝空方腿貢獻（−空方標的平均報酬） |
+| 持有交易日數 | 兩開盤之間的交易日區間數（策略卡「開盤至開盤持有期按兩開盤間交易日區間數」） |
+| 聚合 p | P、L、S 同一形成月份（批次）先平均，再對各批次平均做單樣本 t 檢定（雙尾）；M 一批一筆不適用 |
+| 樣本內／外 | 形成截點 2014-06-15～2022-07-15 為樣本內；2022-08-15、09-15 隔離不列；2022-10-15～2026-09-15 為樣本外；2026-10-15 批尚未出場不列 |
+| 最新年度 | 樣本外最後 12 批（2025-10-15～2026-09-15），屬樣本外子集，不另作檢定 |
+| 單利年化 | 平均報酬×252÷平均持有交易日數，只衡量單筆資金周轉，不是帳戶年化 |
+
+## ① 測試期間
+
+- 形成截點 2014-06-15～2026-09-15（樣本內 98 個月、樣本外 48 個月）；最後一筆出場 2026-10-16。
+- 資料：行情與融資融券表為證交所、櫃買官方每日原始檔（sector-tracker archive，至 2026-11-04）；財報為公開資訊觀測站原始申報（2013Q1～2026Q2）；月營收 FinMind（至 2026-09）；營收更正為 mops-fetch-test 每日重訊總表（至 2026-10-12）；公司行動為 FinMind 股利、除權息結果、減資參考價與重大訊息原文。
+- 策略卡 V02／策略包 R01；樣本切點與事前登記見核准依據。樣本外在本 R01 首次打開，打開後未改任何條件。
+- 樣本規模：TR 成交 848 籃（樣本內 526、樣本外 322），取消 74 籃、未完成 1 籃、暫停 1 籃；主組合樣本內 93 批、樣本外 47 批。TO 成交 825 籃；C 成交 198 籃。
+- 限制：成分是現行分類回溯（T 版 Emit 題材表、策略卡組合年報純度），有事後歸類與存活偏差；放空只做到 L1＋L2，借券量未驗證。
+
+## ② 進出場規則
+
+- T 版子鏈：T1a CCL→PCB/伺服器板；T1b PCB/伺服器板→伺服器組裝；T2a BBU、T2b 電源供應器、T2c 散熱→PC/筆電；T3 記憶體→記憶體模組；T6 網通/高速介面IC→網通交換器；T7 化合物半導體→光通訊/矽光子（扣化合物成員）；T8 紡織成衣（儒鴻、聚陽、廣越為下游，其餘上游）；T9 桂盟、建大、正新→巨大、美利達、愛地雅。共 135 檔（上游 85、下游 66）。
+- 策略卡組合子鏈：1a CCL→PCB；1b PCB→伺服器組裝；2a 電池、2b 電源、2c 散熱→筆電代工；2d 代工→品牌；6 網通 IC→設備；7a 磊晶晶片→光模組；8 加工絲→成衣；9 傳動件→整車（成員依盤點報告）。
+- 每月截點判定角色，截點後第一個交易日開盤依方向建立兩腿（各半名目、腿內等權），下一個截點後第一個交易日開盤出場；可成交、取消、順延、暫停依 ⓪。
+- 公司行動：持有期間遇現增除權的部位（TR 9 筆、TO 9 筆、C 2 筆）依 V04 視為不認購（TR 另列留現金、全損敏感度）；遇減資的部位（TR 2 筆、TO 4 筆；3234、3105、2316、5469）依重大訊息原文換股比與退還現金計算；定穎 6251 下市無出場價，所在 1 籃列未完成（TR、TO 各 1）。
+- 成本聲明：未計入稅、交易成本、借券費與滑價。
+
+## ③ 結果表（策略卡組合，來源：策略卡）
+
+{T['C']}
+
+說明：策略卡組合在樣本內外都沒有方向：主組合 p 0.76、0.86。樣本外多方腿（減速下游）平均上漲 6.7%，被放空的累庫上游也上漲約 6.7%，兩者抵銷；這兩腿的漲跌反映的是 2023 年後光通訊、PCB 族群整體上漲，而非供應鏈錯配。
+
+逐子鏈（每月一籃，單一組合 p 未做多重檢定修正）：
+
+{T['Csub']}
+
+說明：沒有一條子鏈在樣本內外同時顯著；樣本外各子鏈籃數 2～19，檢定力不足。
+
+## ④ 結論
+
+本次回測沒有值得執行的候選組合。
+
+- 唯一候選 TR-M（T 版反向主組合，來源：討論衍生，D-058-20261105-1228-1、1743-1）在事前登記的樣本外檢定未通過：47 批，平均每批 −0.06%，雙尾 p 0.82，勝率 48.9%，凱利 −0.045；樣本外最大回撤 −7.6%，最長回撤 42 筆（1,310 天，未回復）。
+- 樣本內 93 批 +0.41%（p 0.0018）的結果，是看過策略卡組合與 T 版原方向後才取負號得到的方向，屬事後選擇；樣本外不支持。
+- 策略卡組合（C-M）與 T 版原方向（TO-M）樣本外也都不顯著。
+- 依事前登記，未通過即不做敏感度測試；依執行計畫「無候選結案」由 Ed 決定是否結案，預設不送 Eve。
+
+## ⑤ 其後
+
+### 參數全表
+
+全部組合（C、TO、TR 各主組合、Meq、P、L、S、逐子鏈、現增敏感度）× 樣本內／樣本外／最新年度的十項統計、聚合 p 與回撤三項全精度值，見《058_…_V02_R01_原始數據明細.xlsx》「參數全表（全精度）」分頁（共 {sum(1 for _ in open('/home/claude/w058/out_fp/參數全表_V02_R01.csv'))-1} 列）。
+
+### 樣本外結果
+
+樣本外結果已與樣本內並列於各表；主檢定判定見 ④ 與第 ⑦ 節。
+
+### 敏感度測試
+
+不適用：沒有候選組合。事前登記的網格（營收減速 1／2／4 次）只在 TR-M 通過時才做，未通過即不做。
+
+### 多重檢定
+
+樣本內看過的主組合：C-M（p 0.758）、TO-M（p 0.0032）；TR-M 為 TO-M 反向，不是獨立檢定。兩者 Holm 修正後為 TO-M 0.0064、C-M 0.758。樣本外只做 TR-M 一次主檢定（p 0.82），未通過，修正與否結論相同。
+
+### 資料處理
+
+- 快篩後修正：① 融資融券表原只抽上游，R01 補抽下游（反向放空下游所需），上游列與快篩完全相同；② 現增除權由快篩的「未完成、排除」改依 V04「不認購」計入；③ 減資部位改用重大訊息原文換股比計算。因此 T 版原方向樣本內主組合由快篩 89 批、−0.32%、p 0.0155 變為 95 批、−0.38%、p 0.0032，方向不變。
+- 漲跌停判斷：除權息日用官方參考價、減資恢復買賣日用官方漲跌停，其餘依規則推算（快篩已核對 267 個一價日，266 一致，唯一不一致者已改官方值）。
+
+### 修訂紀錄
+
+| 現行 V／R | 檔案 | 來源 V／R | 狀態 |
+|---|---|---|---|
+| V02／R01 | 058_多空配置-供應鏈資訊傳遞與庫存錯配策略_V02_R01_回測結果（Google 文件，本檔） | R01 | 新建（Elon） |
+| V02／R01 | 058_多空配置-供應鏈資訊傳遞與庫存錯配策略_V02_R01_注意事項（Google 文件） | R01 | 新建（Elon） |
+| V02／R01 | 058_多空配置-供應鏈資訊傳遞與庫存錯配策略_V02_R01_原始數據明細.xlsx | R01 | 新建，待 Ed 上傳 |
+| V02／R01 | 058_多空配置-供應鏈資訊傳遞與庫存錯配策略_V02_R01_程式與來源檔.txt | R01 | 新建，待 Ed 上傳 |
+| V02／R01 | 058_正式策略包_樣本外檢定事前登記_20261105.json | R01 | 新建（Elon） |
+| V02 | 058_樣本切點凍結紀錄_20261105.json | 快篩 | 沿用 |
+| V02 | 058_多空配置-供應鏈資訊傳遞與庫存錯配策略_V02_快篩報告（含 E-Test T 版） | 快篩 | 沿用（快篩不計 R） |
+
+本 R01 為首次提交，無退回紀錄。
+
+## ⑦ 討論衍生組合（E-Test）
+
+### 7-1 本節說明
+
+- 來源：D-058-20261105-1228-1（T 版題材分類成分，Ed 原文「把純度的標準放寬呢 用常見的哪些族群分類去跑 不用太在意實際營收佔比規則」）與 D-058-20261105-1743-1（反向組合做正式策略包，Ed 原文「Ｂ」）。
+- 與策略卡組合共用：訊號、門檻、進出場、L1＋L2、報酬口徑、樣本切點、成本聲明（未計入稅、交易成本、借券費與滑價）。
+
+### 7-2 與策略卡組合的差別
+
+| 項目 | 策略卡組合 C | T 版原方向 TO | T 版反向 TR（主檢定） |
+|---|---|---|---|
+| 成分 | 卡上種子、年報產品占比過半 | Emit 題材分類表現行回溯、不看營收占比 | 同 TO |
+| 方向 | 多減速下游、空累庫上游 | 同 C | 多累庫上游、空減速下游 |
+| 放空 L2 檢查對象 | 上游 | 上游 | 下游 |
+| 時點規則 | 未違反 | 未違反 | 未違反 |
+| 與策略卡不一致 | — | 不套純度 | 不套純度；策略卡寫「不自動新增反向版本」，本組合經 Ed 指定（1743-1）才做 |
+| 樣本外 | 封存至 R01 | 封存至 R01 | 事前登記後於 R01 首次打開 |
+
+### 7-3 主檢定：TR-M
+
+{T['TRmain']}
+
+說明：樣本內每批 +0.41%、七成批次為正；樣本外降為 −0.06%、勝率不到五成，p 0.82，未通過。最新年度 12 批 +0.91%（p 0.13）為樣本外子集，不影響判定。
+
+### 7-4 TR 其他層級
+
+{T['TRall']}
+
+說明：樣本外兩腿都很強但方向相同：做多的累庫上游平均每月 +3.42%（聚合 p 0.0018），放空的減速下游平均每月也漲 3.59%（空方腿聚合 p 0.0006），相減後籃子層只剩 −0.09%（聚合 p 0.67）。樣本內的正報酬主要來自多方腿，空方腿本來就不顯著（聚合 p 0.77）。
+
+### 7-5 TR 現增除權敏感度
+
+{T['TRseo']}
+
+說明：現增除權部位只有 9 筆，改用留現金或全損都不改變結論；全損版本樣本外更差（−0.29%）。
+
+### 7-6 TR 各子鏈
+
+{T['TRsub']}
+
+說明：樣本外只有 T1a（CCL→PCB）單獨 p＜0.05（+2.56%），樣本內同一子鏈不顯著（p 0.11）；樣本內最強的 T7（光通訊）、T2c（散熱）在樣本外轉負或不顯著。10 條子鏈的單一 p 未做多重檢定修正，Holm 修正後樣本外沒有一條顯著。
+
+### 7-7 TR 診斷（描述）
+
+- 逐年（主組合）：樣本內 2014～2022 八年為正、一年小負，2018、2019 單獨顯著；樣本外 2023 年 −1.07%、2024 年 −0.77%、2025 年 +1.09%、2026 年（9 批）+0.51%，各年都不顯著。
+- 逐一移除單一子鏈：樣本內平均 +0.30%～+0.44%、p 0.0006～0.0097；樣本外 −0.28%～+0.07%、p 0.30～0.99，沒有任何一條子鏈是樣本外失敗的單一原因。
+- 前五大正貢獻批次：樣本內占正報酬合計 25%；樣本外占 53%，而樣本外淨報酬為負。
+- 上游累庫訊號共 3,571 個股票月，同子鏈同股連續訊號段 559 段；同一季 DIO 會連續用三個月，月份數不等於獨立資訊次數。
+- 換手：每批全數出清再建倉，名目換手每月約 200%（買賣各 100%）；主組合樣本外平均毛報酬為負，沒有成本承受空間。
+
+### 7-8 T 版原方向 TO（描述）
+
+{T['TO']}
+
+逐子鏈：
+
+{T['TOsub']}
+
+說明：TO 樣本內顯著為負（主組合 p 0.0032），樣本外轉為 +0.06%（p 0.80）；它與 TR 是同一個現象的兩面，樣本外同樣消失。
+
+### 7-9 E-Test 結論
+
+- TR（反向）：不建議繼續。事前登記的樣本外檢定未通過。
+- TO（原方向）：不建議繼續。樣本外無方向。
+- 建議後續 E-Test：無。若 Ed 仍想追蹤，只能把 TR 列為研究現象，等 2027 年以後資料做未來驗證；已看過 2022-10～2026-09 的樣本外，之後任何依此期間結果提出的新條件都不再有獨立樣本外。
+
+### 7-10 注意事項
+
+- 時點規則：全部組合未違反。
+- 測試範圍：C、TO、TR 三系列的主組合、Meq、P、L、S、逐子鏈與 TR 現增兩種敏感度，全部列於參數全表；未測策略卡組合的反向版本（未經 Ed 指定）。
+- 多重檢定：見 ⑤。
+- 成本：未計入稅、交易成本、借券費與滑價。
+"""
+open('/home/claude/w058/deliver/report_R01.md','w',encoding='utf-8').write(md); print(len(md))
+
+
+====================================================================================================
+檔案：elon_tools.py（elon-backtest 技能）｜sha256 4e7a8db803decb031c1368df85bd238ffd09de7937c929f3b3fef2b50a57e7ce
+====================================================================================================
+
+"""elon_tools — Elon 回測作業工具（elon-backtest 技能）。
+統計一律呼叫 Drive 上的 bt_stats 原檔；本檔不重算統計，只做資料處理、出表與自檢。
+"""
+import importlib.util, math, subprocess, sys
+from decimal import Decimal, ROUND_FLOOR, ROUND_CEILING
+import numpy as np
+import pandas as pd
+
+# ---------- 1. 載入 bt_stats ----------
+def load_bt_stats(path):
+    """載入 Drive 下載的 bt_stats 原檔；selftest 未通過就停止。"""
+    r = subprocess.run([sys.executable, path, "--selftest"], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError("bt_stats selftest 未通過，停止計算並回報 Ed：\n" + r.stdout[-2000:])
+    spec = importlib.util.spec_from_file_location("bt_stats", path)
+    bt = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bt)
+    return bt
+
+# ---------- 2. 價格工具 ----------
+def share_return(entry_date, entry_px, exit_date, exit_px, events):
+    """含息報酬：固定股數加實得現金（研究預設口徑 V03 第三節）。
+    events：該股公司行動清單，每筆為 dict：
+      date   除權息日或減資恢復買賣日
+      cash   每股現金股利實額（來源記載值，不用參考價差反推）
+      stock  每股配股數（例：配股 1 元、面額 10 元＝0.1）
+      swap   減資換股比（例：每 1 股換 0.7 股＝0.7）
+      refund 減資每股退還現金
+    只計入 entry_date < date <= exit_date 的事件：進場時已除權的不算，出場當天才除權的要算。
+    同一天的現金與配股都以事件前持股計算。不做股息再投資，不計稅。
+    報酬＝（出場持股×出場價＋累計現金）÷進場價－1。
+    """
+    shares, cash = 1.0, 0.0
+    for ev in sorted(events, key=lambda e: pd.Timestamp(e["date"])):
+        if pd.Timestamp(entry_date) < pd.Timestamp(ev["date"]) <= pd.Timestamp(exit_date):
+            pre = shares
+            cash += pre * (ev.get("cash", 0.0) + ev.get("refund", 0.0))
+            shares = pre * (1.0 + ev.get("stock", 0.0)) * ev.get("swap", 1.0)
+    return (shares * exit_px + cash) / entry_px - 1
+
+def tick_size(price, kind="stock"):
+    """現行升降單位。kind='stock' 股票，'etf' ETF。更早期間使用前先與官方值比對。"""
+    p = Decimal(str(price))
+    if kind == "etf":
+        return Decimal("0.01") if p < 50 else Decimal("0.05")
+    for bound, tick in ((10, "0.01"), (50, "0.05"), (100, "0.1"), (500, "0.5"), (1000, "1")):
+        if p < bound:
+            return Decimal(tick)
+    return Decimal("5")
+
+def limit_prices(ref, date, kind="stock"):
+    """依官方規則推算漲跌停價（只在判斷能否成交時用；事件由漲跌停定義時必須用官方逐日值）。
+    2015-06-01 前漲跌幅 7%，之後 10%。漲停向下取到升降單位，跌停向上取。
+    除權息日、減資恢復買賣日請傳入官方參考價；新上市（櫃）前五日無漲跌幅限制，不要呼叫本函式。
+    """
+    pct = Decimal("0.07") if pd.Timestamp(date) < pd.Timestamp("2015-06-01") else Decimal("0.10")
+    r = Decimal(str(ref))
+    up_raw, dn_raw = r * (1 + pct), r * (1 - pct)
+    tu, td = tick_size(up_raw, kind), tick_size(dn_raw, kind)
+    up = (up_raw / tu).to_integral_value(rounding=ROUND_FLOOR) * tu
+    dn = (dn_raw / td).to_integral_value(rounding=ROUND_CEILING) * td
+    return float(up), float(dn)
+
+def compare_limits(sample):
+    """sample 欄位：ref, date, kind, official_up, official_dn。回傳不一致的列；應為空才可用推算值。"""
+    bad = []
+    for row in sample.itertuples():
+        up, dn = limit_prices(row.ref, row.date, getattr(row, "kind", "stock"))
+        if abs(up - row.official_up) > 1e-9 or abs(dn - row.official_dn) > 1e-9:
+            bad.append((row.date, row.ref, up, row.official_up, dn, row.official_dn))
+    return bad
+
+# ---------- 3. 出表 ----------
+TEN = ["樣本數", "平均報酬", "平均持有交易日數", "單利年化", "勝率", "賠率R", "凱利", "標準差", "t值", "雙尾p"]
+AGG = ["聚合單位", "聚合單位數", "聚合p"]
+REPORT_NAMES = {"單利年化": "單筆資金周轉年化報酬（單利）", "賠率R": "賠率 R", "雙尾p": "雙尾 p 值", "t值": "t 值"}
+
+def ten_table(trades, bt, by=("combo",), cluster_unit=None):
+    """以 bt_stats 產出十項統計表（不含半凱利）。trades 只放策略卡組合或只放討論衍生組合（E-Test），兩種分表。
+    by 可加 'sample' 讓樣本內、樣本外、最新年度並列。"""
+    t = trades[trades["excluded_reason"].isna() | (trades["excluded_reason"] == "")].copy()
+    if t["is_etest"].nunique() > 1:
+        raise ValueError("策略卡組合與討論衍生組合要分表，不可放在同一張表")
+    t["_key"] = t[list(by)].astype(str).agg("｜".join, axis=1)
+    use_cluster = cluster_unit is not None and t["cluster"].notna().all()
+    res = bt.summarize_df(t, ret="ret", hold="hold_days",
+                          cluster="cluster" if use_cluster else None,
+                          cluster_unit=cluster_unit if use_cluster else None, by="_key")
+    cols = ["_key"] + TEN + (AGG if use_cluster else []) + ["N/A原因", "bt_stats版本"]
+    out = res[cols].rename(columns={"_key": "／".join(by)})
+    return out
+
+def to_markdown(table, pct_cols=("平均報酬", "單利年化", "勝率", "標準差")):
+    """報告用顯示格式；比對與自檢一律用未四捨五入的原表。"""
+    d = table.copy()
+    for c in d.columns:
+        if c in pct_cols:
+            d[c] = d[c].map(lambda v: "N/A" if v is None or (isinstance(v, float) and math.isnan(v)) else f"{v*100:.2f}%")
+        elif d[c].dtype.kind == "f":
+            d[c] = d[c].map(lambda v: "N/A" if v is None or math.isnan(v) else f"{v:.4g}")
+    d = d.rename(columns=REPORT_NAMES).fillna("N/A")
+    return d.to_markdown(index=False)
+
+DD = ["最大回撤", "最差三次回撤平均", "最長回撤期筆數", "最長回撤期日曆日", "最長回撤期未回復", "最長回撤期聚合單位數"]
+
+def dd_table(trades, bt, by=("combo",), sd=None, sd_source=None):
+    """以 bt_stats.drawdown3 產出回撤三項；與 ten_table 一樣，策略卡組合與討論衍生組合分表。"""
+    if not hasattr(bt, "drawdown3"):
+        raise RuntimeError("bt_stats 版本不含 drawdown3，請下載 v1.1 以上")
+    t = trades[trades["excluded_reason"].isna() | (trades["excluded_reason"] == "")].copy()
+    if t["is_etest"].nunique() > 1:
+        raise ValueError("策略卡組合與討論衍生組合要分表，不可放在同一張表")
+    t["_key"] = t[list(by)].astype(str).agg("｜".join, axis=1)
+    rows = []
+    for key, g in t.groupby("_key", sort=False):
+        cl = g["cluster"].tolist() if g["cluster"].notna().all() else g["entry_date"].astype(str).tolist()
+        o = bt.drawdown3(g["ret"].to_numpy(), g["entry_date"], g["exit_date"], cluster=cl, sd=sd, sd_source=sd_source)
+        row = {"／".join(by): key}
+        row.update(o)
+        n, u = o.get("最長回撤期筆數"), o.get("最長回撤期聚合單位數")
+        row["需註記"] = bool(n and u and n >= 2 * u)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+def dd_markdown(dd):
+    """回撤三項顯示格式。"""
+    d = pd.DataFrame()
+    d[dd.columns[0]] = dd[dd.columns[0]]
+    f = lambda v: "N/A" if v is None or (isinstance(v, float) and math.isnan(v)) else f"{v*100:.1f}%"
+    d["最大回撤"] = dd["最大回撤"].map(f)
+    d["最差三次回撤平均"] = dd["最差三次回撤平均"].map(f)
+    def lab(r):
+        if r["最長回撤期筆數"] is None or (isinstance(r["最長回撤期筆數"], float) and math.isnan(r["最長回撤期筆數"])):
+            return "N/A"
+        if r["最長回撤期筆數"] == 0:
+            return "無回撤"
+        s = f"{int(r['最長回撤期筆數']):,}筆（{int(r['最長回撤期日曆日']):,}天" + ("，未回復" if r["最長回撤期未回復"] else "") + "）"
+        return s
+    d["最長回撤期"] = dd.apply(lab, axis=1)
+    d["註記（聚合單位數）"] = dd.apply(lambda r: f"{int(r['最長回撤期筆數'])} 筆 = {int(r['最長回撤期聚合單位數'])} 個聚合單位" if r["需註記"] else "", axis=1)
+    return d.to_markdown(index=False)
+
+# ---------- 4. 交件前自檢 ----------
+REQUIRED = ["trade_id", "combo", "is_etest", "symbol", "info_time", "entry_time", "entry_date",
+            "entry_px", "exit_date", "exit_px", "ret", "hold_days", "cluster", "sample", "excluded_reason"]
+
+def selfcheck(trades, bt, reported=None, by=("combo",), cluster_unit=None, report_text=None, tol=1e-4, etest=False, quick=False, reported_dd=None, sd=None, sd_source=None,
+              calendar=None, split=None, current_r=None):
+    """回傳 [(PASS/FAIL/WARN, 項目, 說明)]。FAIL 全部處理完才交件。
+    reported：報告中的結果表（ten_table 同格式、未四捨五入）；report_text：報告全文。
+    reported_dd：報告中的回撤表（dd_table 同格式、未四捨五入）；sd／sd_source 與出表時相同。
+    etest=False 核對策略卡組合表，etest=True 核對討論衍生組合表；有 E-Test 時兩張表各跑一次。
+    quick=True 表示快篩：納入的交易不得有樣本外或最新年度。
+    calendar：官方交易日清單（防錯 B3／C6）；有傳就以它重算持有交易日數（含首尾）並核對。
+    split：(樣本內末日, 樣本外首日)（防錯 D5／D7、口徑第五節）；有傳就核對樣本標籤與切點、隔離帶。
+    current_r：現行修訂號，例如 "R05"（防錯 E4）；有傳就檢查報告開頭沒有殘留其他 R。"""
+    out = []
+    def add(ok, item, msg="", warn=False):
+        out.append(("PASS" if ok else ("WARN" if warn else "FAIL"), item, msg))
+    miss = [c for c in REQUIRED if c not in trades.columns]
+    add(not miss, "明細欄位齊全", f"缺 {miss}" if miss else "")
+    if miss:
+        return out
+    ex = trades["excluded_reason"].fillna("").astype(str).str.len() > 0
+    t = trades[~ex]
+    if quick:
+        oos = t["sample"].astype(str).isin(["樣本外", "最新年度"])
+        add(not oos.any(), "快篩未用到樣本外", f"{int(oos.sum())} 筆屬樣本外或最新年度，快篩只能用樣本內")
+    add(t["ret"].notna().all(), "納入交易的報酬無缺值", "有缺值時不得推估，改列排除原因")
+    add(trades.loc[ex, "ret"].isna().all(), "排除列不帶報酬", "排除的交易 ret 留空")
+    add((t["ret"].abs() < 1).all(), "報酬為小數口徑", "有 |ret|≥1，確認不是百分數", warn=True)
+    h = t["hold_days"]
+    add(((h >= 1) & (h == h.round())).all(), "持有交易日數為 ≥1 的整數")
+    late = pd.to_datetime(t["entry_time"]) <= pd.to_datetime(t["info_time"])
+    add(not late.any(), "進場晚於資料可用時點", f"{int(late.sum())} 筆違反時點規則：{list(t.loc[late,'trade_id'][:10])}")
+    back = pd.to_datetime(t["exit_date"]) < pd.to_datetime(t["entry_date"])
+    add(not back.any(), "出場日不早於進場日", f"{int(back.sum())} 筆")
+    add(trades["trade_id"].is_unique, "交易編號不重複")
+    # 防錯 C7：同組合同股票持倉不重疊（前筆出場當日不得再進場）
+    s = t.assign(_e=pd.to_datetime(t["entry_date"]), _x=pd.to_datetime(t["exit_date"])).sort_values(["combo", "symbol", "_e"])
+    prev_x = s.groupby(["combo", "symbol"])["_x"].shift()
+    ov = s.loc[s["_e"] <= prev_x, "trade_id"]
+    add(ov.empty, "同組合同股票持倉不重疊", f"{len(ov)} 筆：{list(ov[:10])}；策略卡明文允許重疊時在注意事項說明", warn=True)
+    # 防錯 B3／C6：持有交易日數依官方交易日曆含首尾計算
+    if calendar is not None:
+        cal = pd.DatetimeIndex(pd.to_datetime(sorted(set(calendar))))
+        e = cal.searchsorted(pd.to_datetime(t["entry_date"]).values)
+        x = cal.searchsorted(pd.to_datetime(t["exit_date"]).values, side="right")
+        bad = t.loc[(x - e) != t["hold_days"].to_numpy(), "trade_id"]
+        add(bad.empty, "持有日數與交易日曆一致", f"{len(bad)} 筆不符：{list(bad[:10])}（不得數個股有效日K）")
+    # 防錯 D5／D7、口徑第五節：樣本內須在切點前出場，樣本外須在隔離帶後進場
+    if split is not None:
+        is_end, oos_start = pd.Timestamp(split[0]), pd.Timestamp(split[1])
+        lab = t["sample"].astype(str)
+        b1 = t.loc[(lab == "樣本內") & (pd.to_datetime(t["exit_date"]) > is_end), "trade_id"]
+        b2 = t.loc[lab.isin(["樣本外", "最新年度"]) & (pd.to_datetime(t["entry_date"]) < oos_start), "trade_id"]
+        add(b1.empty and b2.empty, "樣本標籤與切點一致", f"樣本內出場晚於切點 {len(b1)} 筆、樣本外早於隔離帶 {len(b2)} 筆：{list(b1[:5]) + list(b2[:5])}")
+    formal = t[t["is_etest"].astype(bool) == etest]
+    if cluster_unit is not None:
+        add(formal["cluster"].notna().all(), "群聚標籤齊全", "有群聚時每筆都要有聚合單位標籤")
+    if reported is not None:
+        mine = ten_table(formal, bt, by=by, cluster_unit=cluster_unit)
+        key = mine.columns[0]
+        other_keys = set(t[t["is_etest"].astype(bool) != etest][list(by)].astype(str).agg("｜".join, axis=1))
+        mixed = set(reported[key].astype(str)) & (other_keys - set(mine[key]))
+        add(not mixed, "策略卡組合與 E-Test 組合分表", str(sorted(mixed)))
+        m = reported.merge(mine, on=key, how="outer", suffixes=("_報告", "_重算"), indicator=True)
+        add((m["_merge"] == "both").all(), "結果表組合與明細一一對應",
+            str(m.loc[m["_merge"] != "both", key].tolist()))
+        for c in TEN + (["聚合p"] if cluster_unit else []):
+            a, b = m.get(c + "_報告"), m.get(c + "_重算")
+            if a is None or b is None:
+                add(False, f"報告缺欄位：{c}")
+                continue
+            both_na = a.isna() & b.isna()
+            diff = (a.astype(float) - b.astype(float)).abs()
+            bad = ~(both_na | (diff <= tol))
+            add(not bad.any(), f"重算一致：{c}", str(m.loc[bad, key].tolist()))
+        if cluster_unit is not None:
+            need = mine[mine["聚合單位數"] < mine["樣本數"]][key].tolist()
+            add(True if not need else reported.set_index(key).loc[need, "聚合p"].notna().all(),
+                "有群聚的組合已列聚合 p", str(need))
+    if reported_dd is not None:
+        mine_dd = dd_table(formal, bt, by=by, sd=sd, sd_source=sd_source)
+        key = mine_dd.columns[0]
+        m = reported_dd.merge(mine_dd, on=key, how="outer", suffixes=("_報告", "_重算"), indicator=True)
+        add((m["_merge"] == "both").all(), "回撤表組合與明細一一對應", str(m.loc[m["_merge"] != "both", key].tolist()))
+        for c, tl in (("最大回撤", tol), ("最差三次回撤平均", tol), ("最長回撤期筆數", 0), ("最長回撤期日曆日", 0)):
+            a, b = m.get(c + "_報告"), m.get(c + "_重算")
+            if a is None or b is None:
+                add(False, f"回撤表缺欄位：{c}")
+                continue
+            bad = ~((a.isna() & b.isna()) | ((a.astype(float) - b.astype(float)).abs() <= tl))
+            add(not bad.any(), f"回撤重算一致：{c}", str(m.loc[bad, key].tolist()))
+    elif not quick and reported is not None:
+        add(False, "已附回撤三項", "正式策略包結果表須含回撤三項（Elon 手冊第 6 節 ③）", warn=True)
+    if report_text is not None:
+        head = report_text.strip()[:600]
+        add(all(s in head for s in ("①", "②", "③")), "開頭有三行決策摘要")
+        add("未計入" in report_text, "有成本聲明（未計入稅、交易成本與滑價）")
+        add("決策紀錄" in report_text, "引用了決策紀錄", "核准依據應引用策略總表「決策紀錄」對應列", warn=True)
+        add("半凱利" not in report_text, "報告未列半凱利")
+        add("最大回撤" in report_text, "報告列了回撤三項", "十項統計之後應列最大回撤、最差三次回撤平均、最長回撤期")
+        no_cand = "沒有值得執行的候選組合" in report_text or "沒有值得續做的組合" in report_text
+        add(no_cand or "敏感度測試" in report_text, "有候選組合時已附敏感度測試", "快篩報告可忽略；正式策略包有候選組合時依 Elon 手冊第 4-B 節補做", warn=True)
+        # 防錯 E4：格式字串未替換、決策摘要殘留舊版號
+        import re
+        left = sorted(set(re.findall(r"\{[A-Za-z_][A-Za-z0-9_]*\}", report_text)))
+        add(not left, "報告沒有未替換的變數", f"出現 {left[:10]}")
+        if current_r:
+            old = sorted(set(re.findall(r"R\d{2}", head)) - {current_r})
+            add(not old, "決策摘要沒有殘留舊版號", f"開頭出現 {old}，現行為 {current_r}；確屬比較說明時在注意事項寫理由", warn=True)
+        hits = [w for w in ("推估", "估計值", "假設為", "約略") if w in report_text]
+        add(not hits, "沒有推估值字樣", f"出現 {hits}，確認不是用推估值補缺", warn=True)
+    return out
+
+def print_check(res):
+    for s, item, msg in res:
+        print(f"{s:4} {item}" + (f"：{msg}" if msg and s != "PASS" else ""))
+    n_fail = sum(s == "FAIL" for s, _, _ in res)
+    print("自檢結果：" + ("全部通過" if n_fail == 0 else f"{n_fail} 項 FAIL，修正後再交件"))
+    return n_fail == 0
+
+# ---------- 5. 基準案例（技能或 bt_stats 改動後必跑） ----------
+# 固定 18 筆交易；預期值由 bt_stats 1.2 與本檔於 2026-11-05 產生後凍結。
+BASE_ROWS = [  # trade_id, combo, symbol, entry, exit, hold_days, ret
+    ("T01","A","1101","2024-01-02","2024-01-04",3,0.0210), ("T02","A","2330","2024-01-02","2024-01-03",2,-0.0150),
+    ("T03","A","2317","2024-01-08","2024-01-08",1,0.0000), ("T04","A","1101","2024-01-10","2024-01-16",5,0.0320),
+    ("T05","A","2454","2024-01-10","2024-01-12",3,-0.0080), ("T06","A","2603","2024-01-10","2024-01-11",2,0.0110),
+    ("T07","A","2330","2024-01-18","2024-01-22",3,-0.0270), ("T08","A","2317","2024-01-24","2024-01-26",3,0.0140),
+    ("T09","A","2882","2024-01-29","2024-02-01",4,-0.0060), ("T10","A","1101","2024-02-02","2024-02-06",3,0.0190),
+    ("T11","A","2454","2024-02-05","2024-02-05",1,-0.0310), ("T12","A","2603","2024-02-07","2024-02-08",2,0.0250),
+    ("T13","B","3008","2024-01-03","2024-01-05",3,0.0050), ("T14","B","3008","2024-01-09","2024-01-10",2,0.0120),
+    ("T15","B","2412","2024-01-09","2024-01-11",3,0.0030), ("T16","B","2412","2024-01-17","2024-01-19",3,0.0210),
+    ("T17","B","3008","2024-01-23","2024-01-23",1,0.0080), ("T18","B","2412","2024-01-30","2024-02-02",4,0.0160),
+]
+BASE_EXPECT = {
+    "A": {"樣本數": 12, "平均報酬": 0.0029166666666666677, "平均持有交易日數": 2.6666666666666665, "單利年化": 0.2756250000000001,
+          "勝率": 0.5, "賠率R": 1.1685823754789273, "凱利": 0.07213114754098365, "標準差": 0.0206285694799198,
+          "t值": 0.48978819014345604, "雙尾p": 0.6339053665465506, "聚合單位數": 9, "聚合p": 0.8859433065610491,
+          "最大回撤": -0.014973678233494714, "最差三次回撤平均": -0.006007599733477013, "最長回撤期筆數": 6, "最長回撤期日曆日": 21},
+    "B": {"樣本數": 6, "平均報酬": 0.010833333333333334, "平均持有交易日數": 2.6666666666666665, "單利年化": 1.0237500000000002,
+          "勝率": 1.0, "賠率R": None, "凱利": None, "標準差": 0.006853223086013374,
+          "t值": 3.872066989079671, "雙尾p": 0.011735687271193587, "聚合單位數": 5, "聚合p": 0.018734407673253035,
+          "最大回撤": 0.0, "最差三次回撤平均": 0.0, "最長回撤期筆數": 0, "最長回撤期日曆日": 0},
+}
+
+def baseline_trades():
+    d = pd.DataFrame(BASE_ROWS, columns=["trade_id", "combo", "symbol", "entry_date", "exit_date", "hold_days", "ret"])
+    d["is_etest"] = False
+    d["info_time"] = (pd.to_datetime(d["entry_date"]) - pd.Timedelta(days=1)).dt.strftime("%Y-%m-%d 14:30")
+    d["entry_time"] = d["entry_date"] + " 09:00"
+    d["entry_px"], d["exit_px"] = 100.0, 100.0 * (1 + d["ret"])
+    d["cluster"], d["sample"], d["excluded_reason"] = d["entry_date"], "樣本內", None
+    return d
+
+def baseline_check(bt, tol=1e-10):
+    """① 數值與凍結值一致；② 正確資料自檢全過；③ 故意改錯的資料，自檢要抓到。全部 True 才算通過。"""
+    cal = list(pd.bdate_range("2024-01-02", "2024-02-29"))
+    t = baseline_trades()
+    tt = ten_table(t, bt, by=("combo",), cluster_unit="進場日").set_index("combo")
+    dd = dd_table(t, bt, by=("combo",)).set_index("combo")
+    bad = []
+    for k, exp in BASE_EXPECT.items():
+        for c, v in exp.items():
+            got = tt.loc[k, c] if c in tt.columns else dd.loc[k, c]
+            na = got is None or (isinstance(got, float) and math.isnan(got))
+            if (v is None) != na or (v is not None and abs(float(got) - v) > tol):
+                bad.append(f"{k}.{c}: 得 {got}，應為 {v}")
+    print("① 數值一致" if not bad else "① 數值不一致：\n  " + "\n  ".join(bad))
+    ok_clean = all(s != "FAIL" and s != "WARN" for s, _, _ in selfcheck(t, bt, calendar=cal, quick=True))
+    print("② 正確資料自檢全過" if ok_clean else "② 正確資料出現 FAIL／WARN")
+    w = t.copy()
+    w.loc[w.trade_id == "T04", "hold_days"] = 4                 # 持有日與日曆不符
+    w.loc[w.trade_id == "T14", ["entry_date", "entry_time"]] = ["2024-01-05", "2024-01-05 09:00"]  # 與 T13 重疊
+    hit = {i for s, i, _ in selfcheck(w, bt, calendar=cal, report_text="①②③ 未計入 決策紀錄 最大回撤 {R04_DIFF}") if s != "PASS"}
+    need = {"持有日數與交易日曆一致", "同組合同股票持倉不重疊", "報告沒有未替換的變數"}
+    print("③ 改錯資料全部抓到" if need <= hit else f"③ 漏抓：{need - hit}")
+    return not bad and ok_clean and need <= hit
+
+
+====================================================================================================
+檔案：code/parse_fin.py｜sha256 669bec0b4f0b09e104cbe550941d66fed992092b2df5b1c0631f17b9e049d638
+====================================================================================================
+# 058：解析公開資訊觀測站原始申報（存貨、營業成本、電子書上傳時間、更補正清單）
+import gzip, re, os, csv, glob, datetime as dt
+R58='/home/claude/mops-fetch-test/out/p058/raw'; R54='/home/claude/mops-fetch-test/out/p054/raw'
+CL='/home/claude/mops-fetch-test/out/p054/corrlist'
+import os
+CF=os.environ.get('CODES','/home/claude/mops-fetch-test/p058/codes_058.txt')
+codes=[x.strip() for x in open(CF,encoding='utf-8') if x.strip() and not x.startswith('#')]
+def page(name):
+    for d in (R58,R54):
+        f=f'{d}/{name}.html.gz'
+        if os.path.exists(f): return gzip.open(f).read(), f
+    return None, None
+def cells(b):
+    t=b.decode('utf-8','ignore')
+    t=re.sub(r'<[^>]+>','|',t); t=re.sub(r'&nbsp;',' ',t); t=re.sub(r'\|[\s|]*\|','|',t)
+    return [c.replace('\u3000',' ').strip() for c in t.split('|')]
+def num(s):
+    s=s.replace(',','').strip()
+    if s in ('','-'): return None
+    neg=s.startswith('(') and s.endswith(')')
+    s=s.strip('()')
+    try: v=float(s)
+    except: return None
+    return -v if neg else v
+def after(cs,label,k):
+    """回傳 label 後第 k 個數值欄（金額欄，略過百分比）"""
+    for i,c in enumerate(cs):
+        if c==label:
+            vals=[num(x) for x in cs[i+1:i+1+4*k+4]]
+            amt=[v for j,v in enumerate(vals) if j%2==0]
+            return amt[:k]
+    return None
+rows=[]
+for c in codes:
+    for y in range(102,116):
+        for s in (1,2,3,4):
+            if (y,s)>(115,2): continue
+            bs,fb=page(f'bs_{c}_{y}Q{s}'); is_,fi=page(f'is_{c}_{y}Q{s}')
+            inv=cogs_q=cogs_cum=None; basis=''; note=[]
+            if bs:
+                cs=cells(bs)
+                if '合併資產負債表' in ''.join(cs[:40]): basis='合併'
+                elif any('資產負債表' in x for x in cs[:40]): basis='個別'
+                v=after(cs,'存貨',1); inv=v[0] if v else None
+                if v is None and '查無' not in ''.join(cs) and '不存在' not in ''.join(cs): note.append('BS無存貨列')
+            if is_:
+                cs=cells(is_)
+                lab='營業成本合計' if '營業成本合計' in cs else ('營業成本' if '營業成本' in cs else None)
+                if lab:
+                    v=after(cs,lab,4 if s<4 else 2)
+                    if v:
+                        if s<4: cogs_q=v[0]; cogs_cum=v[2] if len(v)>2 else None
+                        else: cogs_cum=v[0]
+            rows.append(dict(code=c,y=y+1911,q=s,basis=basis,inv=inv,cogs_q=cogs_q,cogs_cum=cogs_cum,note=';'.join(note)))
+# Q4 單季 = 全年 − Q3 累計
+idx={(r['code'],r['y'],r['q']):r for r in rows}
+for r in rows:
+    if r['q']==4 and r['cogs_cum'] is not None:
+        q3=idx.get((r['code'],r['y'],3))
+        r['cogs_q']=r['cogs_cum']-q3['cogs_cum'] if q3 and q3['cogs_cum'] is not None else None
+# 電子書上傳時間（AI1 合併財報，無則 AI3/A 其他中文版最早）
+up={}
+for c in codes:
+    for y in range(102,116):
+        b,f=page(f'doc_{c}_{y}')
+        if not b: continue
+        t=b.decode('big5','ignore')
+        for m in re.finditer(r'(\d{4})(\d{2})_%s_(A[^.]*)\.pdf.*?(\d{3})/(\d{2})/(\d{2}) (\d{2}):(\d{2}):(\d{2})'%c,t,re.S):
+            yy,qq,kind=int(m.group(1)),int(m.group(2)),m.group(3)
+            if kind.endswith('A') : continue   # 英文版
+            ts=dt.datetime(int(m.group(4))+1911,int(m.group(5)),int(m.group(6)),int(m.group(7)),int(m.group(8)))
+            key=(c,yy,qq); pri=0 if kind=='AI1' else 1
+            if key not in up or (pri,ts)<up[key]: up[key]=(pri,ts)
+# 更補正
+corr={}
+KW=re.compile(r'存貨|營業成本|資產負債|損益表|四大報表|財務報表|XBRL',re.I)
+for f in sorted(glob.glob(f'{CL}/list_*.html.gz')):
+    yq=re.search(r'list_(\d{4})(\d{2})_',f); yy,qq=int(yq.group(1)),int(yq.group(2))
+    cs=cells(gzip.open(f).read())
+    for i,x in enumerate(cs):
+        if x in codes and i+4<len(cs) and re.fullmatch(r'\d{8}',cs[i+2] or ''):
+            desc=cs[i+3]+' '+cs[i+4]
+            if '英文' in cs[i+3]: continue
+            corr.setdefault((x,yy,qq),[]).append((cs[i+2],bool(KW.search(cs[i+4])),cs[i+4][:80]))
+w=csv.writer(open(os.environ.get('FOUT','/home/claude/w058/fund_mops.csv'),'w',encoding='utf-8',newline=''))
+w.writerow(['code','y','q','basis','inv','cogs_q','upload','corr_dates_flag','corr_desc','note'])
+for r in rows:
+    u=up.get((r['code'],r['y'],r['q'])); cl=corr.get((r['code'],r['y'],r['q']),[])
+    w.writerow([r['code'],r['y'],r['q'],r['basis'],r['inv'],r['cogs_q'],u[1].strftime('%Y-%m-%d %H:%M') if u else '',
+                ';'.join(d for d,fl,_ in cl if fl),' / '.join(f'{d}:{s}' for d,fl,s in cl),r['note']])
+print(len(rows), sum(1 for r in rows if r['inv'] is not None), sum(1 for r in rows if r['cogs_q'] is not None), len(up), sum(len(v) for v in corr.values()))
+
+
+====================================================================================================
+檔案：px_extract.py｜sha256 592316a6e8ee6ea01a723805a84501ef4089c08249b31a64f96a2259f9bc23c2
+====================================================================================================
+# 從 sector-tracker 官方每日行情原始檔抽出 63 檔種子日K（未還原）
+import gzip, json, os, csv, re
+S='/home/claude/ed123698745ed-oss/sector-tracker/archive/raw'
+codes={r['代號'] for r in csv.DictReader(open('seeds.csv',encoding='utf-8'))}
+def num(x):
+    x=str(x).replace(',','').strip()
+    try: return float(x)
+    except: return None
+w=csv.writer(open('px_seeds.csv','w',encoding='utf-8',newline='')); w.writerow(['date','code','mkt','open','high','low','close','vol','amt'])
+days=set()
+for mkt in ('twse','tpex'):
+    for f in sorted(os.listdir(f'{S}/{mkt}')):
+        d=f[:8]
+        if d<'20120101': continue
+        try: j=json.load(gzip.open(f'{S}/{mkt}/{f}'))
+        except Exception as e: print('bad',f,e); continue
+        rows=None
+        for tb in j.get('tables',[]):
+            fl=tb.get('fields') or []
+            if mkt=='twse' and fl[:2]==['證券代號','證券名稱']: rows=[(r[0],r[5],r[6],r[7],r[8],r[2],r[4]) for r in tb['data']]
+            if mkt=='tpex' and fl and fl[0].strip()=='代號': rows=[(r[0],r[4],r[5],r[6],r[2],r[7],r[8]) for r in tb['data']]
+        if rows is None:
+            if j.get('stat') not in (None,'OK','ok'): pass
+            continue
+        days.add((d,mkt))
+        for r in rows:
+            c=r[0].strip()
+            if c in codes: w.writerow([d,c,mkt]+[num(x) for x in r[1:]])
+print(len(days))
+
+
+====================================================================================================
+檔案：code/px_extract_all.py｜sha256 c6df2834e02e38e33115bd9079742a403b597750a9f7e501b761b897e0d12d24
+====================================================================================================
+# 從 sector-tracker 官方每日行情原始檔抽出 63 檔種子日K（未還原）
+import gzip, json, os, csv, re
+S='/home/claude/ed123698745ed-oss/sector-tracker/archive/raw'
+import json,os
+codes={r['代號'] for r in csv.DictReader(open('seeds.csv',encoding='utf-8'))}|{c for v in json.load(open('subt.json')).values() for k in v for c in v[k]}
+def num(x):
+    x=str(x).replace(',','').strip()
+    try: return float(x)
+    except: return None
+w=csv.writer(open('px_all.csv','w',encoding='utf-8',newline='')); w.writerow(['date','code','mkt','open','high','low','close','vol','amt'])
+days=set()
+for mkt in ('twse','tpex'):
+    for f in sorted(os.listdir(f'{S}/{mkt}')):
+        d=f[:8]
+        if d<'20120101': continue
+        try: j=json.load(gzip.open(f'{S}/{mkt}/{f}'))
+        except Exception as e: print('bad',f,e); continue
+        rows=None
+        for tb in j.get('tables',[]):
+            fl=tb.get('fields') or []
+            if mkt=='twse' and fl[:2]==['證券代號','證券名稱']: rows=[(r[0],r[5],r[6],r[7],r[8],r[2],r[4]) for r in tb['data']]
+            if mkt=='tpex' and fl and fl[0].strip()=='代號': rows=[(r[0],r[4],r[5],r[6],r[2],r[7],r[8]) for r in tb['data']]
+        if rows is None:
+            if j.get('stat') not in (None,'OK','ok'): pass
+            continue
+        days.add((d,mkt))
+        for r in rows:
+            c=r[0].strip()
+            if c in codes: w.writerow([d,c,mkt]+[num(x) for x in r[1:]])
+print(len(days))
+
+
+====================================================================================================
+檔案：code/margin_extract_all.py｜sha256 c1bc7b2e4fafbc933a51bb4a0d76ecad2aba72c1fe4199a394dde83924015ce8
+====================================================================================================
+# 抽出各子鏈上下游標的之逐日融資融券表狀態：是否列為信用交易標的、註記、券限額（正式策略包起含下游）
+import gzip, json, os, csv, sys
+sys.path.insert(0,'code'); import signals as S
+import json
+U=sorted({c for s in S.SUB.values() for c in s['U']+s['D']}|{c for v in json.load(open('subt.json')).values() for c in v['U']+v['D']})  # 正式策略包：反向組合放空下游，一併抽出下游
+R='/home/claude/ed123698745ed-oss/sector-tracker/archive/raw'
+w=csv.writer(open('margin_all.csv','w',encoding='utf-8',newline='')); w.writerow(['date','mkt','code','listed','note','short_limit'])
+for mkt in ('twse_margin','tpex_margin'):
+    for f in sorted(os.listdir(f'{R}/{mkt}')):
+        d=f[:8]
+        if d<'20140501': continue
+        try: j=json.load(gzip.open(f'{R}/{mkt}/{f}'))
+        except Exception: continue
+        rows={}
+        for t in j.get('tables',[]):
+            fl=t.get('fields') or []
+            if mkt=='twse_margin' and fl[:2]==['代號','名稱']:
+                for r in t['data']: rows[r[0].strip()]=(r[15].strip() if len(r)>15 else '', r[13])
+            if mkt=='tpex_margin' and fl and fl[0].strip()=='代號':
+                for r in t['data']: rows[r[0].strip()]=(r[19].strip() if len(r)>19 else '', r[17])
+        if not rows: continue
+        for c in U:
+            if c in rows: w.writerow([d,mkt,c,1,rows[c][0],rows[c][1]])
+            else: w.writerow([d,mkt,c,0,'',''])
+print('ok')
+
+
+====================================================================================================
+檔案：mops-fetch-test p058/fetch_ar.py｜sha256 eb7d15b4708049e112541e6a862e6be5ea3be05abeaeadac3765da051dead4ed
+====================================================================================================
+# 058 盤點：(1) 公司基本資料 ajax_t05st03（主要經營業務／營業比重，63 檔現行資料）
+#           (2) 年報（mtype=F）清單與 PDF：民國 112、113 年上傳者（S1 客戶證據，四條優先鏈 23 檔）；民國 115 年上傳者（最近年報，63 檔產品純度核對）
+#               PDF 只保存 pdftotext 全文（gzip），不存 PDF
+# 用法：python p058/fetch_ar.py；已存在略過（可接力）；每次請求間隔 3 秒
+import os, re, sys, time, gzip, subprocess, urllib.request, urllib.parse
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+OUT = "out/p058/ar"; os.makedirs(OUT, exist_ok=True)
+log = open(f"out/p058/ar_log_{os.environ.get('GITHUB_RUN_ID', 'local')}.txt", "a", encoding="utf-8")  # 每輪獨立日誌，避免多輪同時推送衝突
+def L(s): print(s, flush=True); log.write(s + "\n"); log.flush()
+DEADLINE = time.time() + 52 * 60
+def rd(p): return [x.strip() for x in open(p, encoding="utf-8") if x.strip() and not x.startswith("#")]
+def get(url, data=None, ref=None):
+    h = {"User-Agent": UA}
+    if ref: h["Referer"] = ref
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(data).encode() if data else None, headers=h)
+    b = urllib.request.urlopen(req, timeout=120).read(); time.sleep(3)
+    if b"SECURITY" in b[:3000]:
+        L(f"被擋 {url}"); raise SystemExit(2)
+    return b
+def once(path, fn):
+    if os.path.exists(path): return gzip.open(path).read()
+    if time.time() > DEADLINE: L("時間到，下輪接力"); raise SystemExit(0)
+    for a in range(3):
+        try:
+            b = fn(); gzip.open(path, "wb").write(b); L(f"{path} {len(b)}"); return b
+        except SystemExit: raise
+        except Exception as e: L(f"{path} 第{a+1}次錯誤 {e}"); time.sleep(10)
+    return None
+for c in rd("p058/codes_058.txt"):
+    once(f"{OUT}/t05st03_{c}.html.gz", lambda c=c: get("https://mopsov.twse.com.tw/mops/web/ajax_t05st03",
+        {"encodeURIComponent": 1, "step": 1, "firstin": 1, "off": 1, "keyword4": "", "code1": "", "TYPEK2": "",
+         "checkbtn": "", "queryName": "co_id", "inpuType": "co_id", "TYPEK": "all", "co_id": c},
+        ref="https://mopsov.twse.com.tw/mops/web/t05st03"))
+jobs = [(c, y) for c in rd("p058/codes_ar.txt") for y in (112, 113)] + [(c, 115) for c in rd("p058/codes_058.txt")]
+for c, y in jobs:
+    if True:
+        b = once(f"{OUT}/arlist_{c}_{y}.html.gz", lambda c=c, y=y: get(
+            f"https://doc.twse.com.tw/server-java/t57sb01?step=1&colorchg=1&co_id={c}&year={y}&mtype=F&"))
+        if not b: continue
+        h = b.decode("big5", "ignore")
+        fns = re.findall(r'readfile2\("F","%s","([^"]+\.pdf)"\)' % c, h)
+        pick = [f for f in fns if "F04" in f] or fns
+        if not pick: L(f"{c} {y} 無年報檔"); continue
+        fn = pick[0]; txt = f"{OUT}/ar_{c}_{y}_{fn[:-4]}.txt.gz"
+        if os.path.exists(txt): continue
+        if time.time() > DEADLINE: L("時間到，下輪接力"); sys.exit(0)
+        try:
+            p9 = get(f"https://doc.twse.com.tw/server-java/t57sb01?step=9&kind=F&co_id={c}&filename={fn}").decode("big5", "ignore")
+            m = re.search(r"href=['\"]?([^'\" >]+\.pdf)", p9, re.I)
+            if not m: L(f"{c} {y} {fn} 找不到下載連結"); open(f"{OUT}/p9_{c}_{y}.html","w").write(p9[:5000]); continue
+            pdf = get(urllib.parse.urljoin("https://doc.twse.com.tw/", m.group(1)))
+            open("/tmp/a.pdf", "wb").write(pdf)
+            subprocess.run(["pdftotext", "-layout", "/tmp/a.pdf", "/tmp/a.txt"], check=True)
+            gzip.open(txt, "wb").write(open("/tmp/a.txt", "rb").read()); L(f"{txt} pdf {len(pdf)}")
+        except SystemExit: raise
+        except Exception as e: L(f"{c} {y} {fn} 錯誤 {e}")
+L("完成")
+
+
+====================================================================================================
+檔案：mops-fetch-test p058/fetch_fin.py｜sha256 e0d24f368d83f5df61b910745b43af72e7679df7ed7809753038fca7c9ba8bdf
+====================================================================================================
+# 058 季報原始申報版本：資產負債表 ajax_t164sb03（存貨）、綜合損益表 ajax_t164sb04（營業成本）、電子書 t57sb01（上傳時間）
+# 63 檔種子 × 民國102Q1～115Q2；054 已抓過的資產負債表與電子書清單（19 檔）不重抓，直接沿用 out/p054/raw
+# 用法：python p058/fetch_fin.py <slice> <nslices>；已存在略過（可接力）；每次請求間隔 3 秒
+import os, sys, time, gzip, urllib.request, urllib.parse
+k, n = int(sys.argv[1]), int(sys.argv[2])
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+OUT = "out/p058/raw"; P54 = "out/p054/raw"; os.makedirs(OUT, exist_ok=True)
+codes = [x.strip() for x in open(os.environ.get("CODES", "p058/codes_058.txt"), encoding="utf-8") if x.strip() and not x.startswith("#")][k::n]
+log = open(f"out/p058/fin_log{os.environ.get('LOGTAG', '')}_{k}.txt", "a", encoding="utf-8")
+def L(s): print(s, flush=True); log.write(s + "\n"); log.flush()
+DEADLINE = time.time() + 52 * 60
+def get(url, data=None, ref=None):
+    h = {"User-Agent": UA}
+    if ref: h["Referer"] = ref
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(data).encode() if data else None, headers=h)
+    return urllib.request.urlopen(req, timeout=60).read()
+def job(name, fn):
+    f = f"{OUT}/{name}.html.gz"
+    if os.path.exists(f) or os.path.exists(f"{P54}/{name}.html.gz"): return
+    if time.time() > DEADLINE: L("時間到，下輪接力"); sys.exit(0)
+    for a in range(3):
+        try:
+            b = fn()
+            if b"SECURITY" in b[:3000]: L(f"{name} 被擋，停止"); raise SystemExit(2)
+            gzip.open(f, "wb").write(b); L(f"{name} {len(b)}"); break
+        except SystemExit: raise
+        except Exception as e: L(f"{name} 第{a+1}次錯誤 {e}"); time.sleep(10)
+    time.sleep(3)
+quarters = [(y, s) for y in range(102, 116) for s in (1, 2, 3, 4) if (y, s) <= (115, 2)]
+def q(api, c, y, s):
+    return get(f"https://mopsov.twse.com.tw/mops/web/ajax_{api}",
+               {"encodeURIComponent": 1, "step": 1, "firstin": 1, "off": 1, "queryName": "co_id", "inpuType": "co_id",
+                "TYPEK": "all", "isnew": "false", "co_id": c, "year": y, "season": f"{s:02d}"},
+               ref=f"https://mopsov.twse.com.tw/mops/web/{api}")
+for c in codes:
+    for y in range(102, 116):
+        job(f"doc_{c}_{y}", lambda c=c, y=y: get(f"https://doc.twse.com.tw/server-java/t57sb01?step=1&colorchg=1&co_id={c}&year={y}&mtype=A&"))
+    for y, s in quarters:
+        job(f"is_{c}_{y}Q{s}", lambda c=c, y=y, s=s: q("t164sb04", c, y, s))
+        job(f"bs_{c}_{y}Q{s}", lambda c=c, y=y, s=s: q("t164sb03", c, y, s))
+L(f"slice {k} 完成")
+
+
+====================================================================================================
+檔案：mops-fetch-test p058/fetch_ca.py｜sha256 0a8a6c314dbf8324941f73e4db1cbc5a7c6e4c1401c971fb078d3653bb7aa422
+====================================================================================================
+# 058：FinMind 匿名下載公司行動（股利政策、除權息結果、減資恢復參考價），63 檔種子；054 已有者略過
+import json, os, time, urllib.request, urllib.parse, urllib.error
+API = "https://api.finmindtrade.com/api/v4/data"; OUT = "out/p058/ca"; os.makedirs(OUT, exist_ok=True)
+P54 = "out/p054/px"
+codes = [x.strip() for x in open("p058/codes_058.txt", encoding="utf-8") if x.strip() and not x.startswith("#")]
+DS = ["TaiwanStockDividend", "TaiwanStockDividendResult", "TaiwanStockCapitalReductionReferencePrice"]
+DEADLINE = time.time() + 50 * 60
+for c in codes:
+    for ds in DS:
+        f = f"{OUT}/{ds}_{c}.json"
+        if os.path.exists(f) or os.path.exists(f"{P54}/{ds}_{c}.json"): continue
+        url = API + "?" + urllib.parse.urlencode({"dataset": ds, "data_id": c, "start_date": "2012-01-01", "end_date": "2026-11-05"})
+        while time.time() < DEADLINE:
+            try:
+                d = json.load(urllib.request.urlopen(url, timeout=90))
+            except urllib.error.HTTPError as e:
+                try: d = json.loads(e.read().decode("utf-8", "ignore"))
+                except Exception: d = {"status": e.code}
+            except Exception as e:
+                print("ERR", e, flush=True); time.sleep(20); continue
+            if d.get("status") == 200:
+                json.dump(d, open(f, "w", encoding="utf-8"), ensure_ascii=False); print("OK", ds, c, len(d["data"]), flush=True); break
+            print("WAIT", str(d.get("msg"))[:80], flush=True); time.sleep(90)
+print("DONE")
+
+
+====================================================================================================
+檔案：mops-fetch-test p058/fetch_fm_t.py｜sha256 b9524401ba1e677272e2b3ab497cd4b6f99d760583cd5e8e8ff4f73043c3e315
+====================================================================================================
+# 058 E-Test T 版：FinMind 匿名下載下游月營收與全部成分公司行動；已存在者略過
+import json, os, sys, time, urllib.request, urllib.parse, urllib.error
+k, n = int(sys.argv[1]), int(sys.argv[2])
+API = "https://api.finmindtrade.com/api/v4/data"
+rd = lambda p: [x.strip() for x in open(p, encoding="utf-8") if x.strip() and not x.startswith("#")]
+jobs = [("TaiwanStockMonthRevenue", c, "2011-01-01") for c in rd("p058/codes_058t_dn.txt")]
+jobs += [(ds, c, "2012-01-01") for c in rd("p058/codes_058t_all.txt") for ds in ("TaiwanStockDividend", "TaiwanStockDividendResult", "TaiwanStockCapitalReductionReferencePrice")]
+jobs = jobs[k::n]
+os.makedirs("out/p058/ca", exist_ok=True); os.makedirs("out/p058/rev", exist_ok=True)
+DEADLINE = time.time() + 50 * 60
+for ds, c, st in jobs:
+    out = f"out/p058/{'rev' if ds.endswith('Revenue') else 'ca'}/{ds}_{c}.json"
+    if os.path.exists(out) or os.path.exists(f"out/p054/px/{ds}_{c}.json"): continue
+    url = API + "?" + urllib.parse.urlencode({"dataset": ds, "data_id": c, "start_date": st, "end_date": "2026-11-05"})
+    while time.time() < DEADLINE:
+        try: d = json.load(urllib.request.urlopen(url, timeout=90))
+        except urllib.error.HTTPError as e:
+            try: d = json.loads(e.read().decode("utf-8", "ignore"))
+            except Exception: d = {"status": e.code}
+        except Exception as e: print("ERR", e, flush=True); time.sleep(20); continue
+        if d.get("status") == 200:
+            json.dump(d, open(out, "w", encoding="utf-8"), ensure_ascii=False); print("OK", ds, c, len(d["data"]), flush=True); break
+        print("WAIT", str(d.get("msg"))[:80], flush=True); time.sleep(90)
+print("DONE")
+
+
+====================================================================================================
+檔案：.github/workflows/p058_fin.yml｜sha256 96e89e0e77e4bb213bfef17ef7c811400ab38192122a4a9ab3b885eb871e6871
+====================================================================================================
+name: 058 MOPS financial fetch
+on:
+  push:
+    branches: [main]
+    paths: ["p058/fetch_fin.py", "p058/codes_058.txt", "p058/RERUN_FIN", ".github/workflows/p058_fin.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: p058-fin
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: timeout 55m python3 p058/fetch_fin.py ${{ matrix.k }} 4 || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p058 && git commit -q -m "058 fin fetch slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+  relay:
+    # 自動接力：任一切片最後一行是「時間到，下輪接力」就再派一輪；全部完成則停止；最多 8 輪
+    needs: fetch
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: main
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(cat p058/RELAY_COUNT 2>/dev/null || echo 0)
+          more=0; for f in out/p058/fin_log_*.txt; do tail -n 1 "$f" | grep -q "時間到" && more=1; done
+          echo "relay=$n more=$more"
+          if [ "$more" = 1 ] && [ "$n" -lt 8 ]; then
+            echo $((n+1)) > p058/RELAY_COUNT
+            git config user.name "github-actions" && git config user.email "actions@github.com"
+            git add p058/RELAY_COUNT && git commit -q -m "058 fin relay $((n+1)) [skip ci]" && git push -q origin HEAD:main || true
+            gh workflow run p058_fin.yml --ref main
+          fi
+
+
+====================================================================================================
+檔案：.github/workflows/p058_fin_t.yml｜sha256 e83f1dbac532a8f073865a332e2537b7e0eb178b4962f99a96fbda7a6fe26b12
+====================================================================================================
+name: 058 T fin fetch
+on:
+  push:
+    branches: [main]
+    paths: ["p058/codes_058t_up.txt", ".github/workflows/p058_fin_t.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: p058-fin-t
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [0, 1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: CODES=p058/codes_058t_up.txt LOGTAG=_t timeout 55m python3 p058/fetch_fin.py ${{ matrix.k }} 6 || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p058 && git commit -q -m "058 T fin slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+  relay:
+    needs: fetch
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: main
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(cat p058/RELAY_COUNT_T 2>/dev/null || echo 0)
+          more=0; for f in out/p058/fin_log_t_*.txt; do tail -n 1 "$f" | grep -q "時間到" && more=1; done
+          echo "relay=$n more=$more"
+          if [ "$more" = 1 ] && [ "$n" -lt 8 ]; then
+            echo $((n+1)) > p058/RELAY_COUNT_T
+            git config user.name "github-actions" && git config user.email "actions@github.com"
+            git add p058/RELAY_COUNT_T && git commit -q -m "058 T fin relay $((n+1)) [skip ci]" && git push -q origin HEAD:main || true
+            gh workflow run p058_fin_t.yml --ref main
+          fi
+
+
+====================================================================================================
+檔案：.github/workflows/p058_ca.yml｜sha256 2560c1a73a679db54aed269f1cae739d97eba778d2593935dd608df6d78d82d5
+====================================================================================================
+name: 058 FinMind corporate actions
+on:
+  push:
+    branches: [main]
+    paths: ["p058/fetch_ca.py", ".github/workflows/p058_ca.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: timeout 52m python3 p058/fetch_ca.py || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p058/ca && git commit -q -m "058 corporate actions [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+
+
+====================================================================================================
+檔案：.github/workflows/p058_fm_t.yml｜sha256 d3ec77819fa36679d5ca526ce294043ebd85f513c2a77ec9c18d5a04eaaf8635
+====================================================================================================
+name: 058 T FinMind fetch
+on:
+  push:
+    branches: [main]
+    paths: ["p058/fetch_fm_t.py", ".github/workflows/p058_fm_t.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: timeout 52m python3 p058/fetch_fm_t.py ${{ matrix.k }} 3 || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p058 && git commit -q -m "058 T finmind slice ${{ matrix.k }} [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+
+
+====================================================================================================
+檔案：.github/workflows/p058_ar.yml｜sha256 6c0f17f93656e6636b854fde8477ef551104f1514cdae6226a11ff943b78ce88
+====================================================================================================
+name: 058 basic info and annual reports
+on:
+  push:
+    branches: [main]
+    paths: ["p058/fetch_ar.py", "p058/codes_ar.txt", ".github/workflows/p058_ar.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: p058-ar
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: sudo apt-get install -y -q poppler-utils >/dev/null
+      - run: timeout 55m python3 p058/fetch_ar.py || true
+      - if: always()
+        run: |
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add out/p058 && git commit -q -m "058 basic info and annual reports [skip ci]" || exit 0
+          for i in 1 2 3 4 5 6 7 8; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep $((RANDOM % 30 + 5)); done
+
+
+====================================================================================================
+檔案：subt.json（T 版子鏈成分）｜sha256 aa358b59bd76ee6879e911af9f68bba81fa91add233772681de82c4cc9c83bbb
+====================================================================================================
+{
+"T1a": {
+"U": [
+"2383",
+"6274",
+"6213",
+"1303",
+"6672"
+],
+"D": [
+"2368",
+"3044",
+"2313",
+"4958",
+"2367",
+"6191",
+"3715",
+"8155",
+"5469",
+"6108",
+"2316",
+"8213",
+"5439",
+"8021",
+"3167",
+"6251"
+]
+},
+"T1b": {
+"U": [
+"2368",
+"3044",
+"2313",
+"4958",
+"2367",
+"6191",
+"3715",
+"8155",
+"5469",
+"6108",
+"2316",
+"8213",
+"5439",
+"8021",
+"3167",
+"6251"
+],
+"D": [
+"2382",
+"3231",
+"6669",
+"2317",
+"2356",
+"2376",
+"3706",
+"2324",
+"4938",
+"6933",
+"7711"
+]
+},
+"T2a": {
+"U": [
+"4931",
+"3211",
+"6121",
+"5309",
+"3323",
+"6781"
+],
+"D": [
+"2357",
+"2353",
+"2376",
+"2377",
+"2324",
+"4938",
+"2385",
+"3515",
+"2362"
+]
+},
+"T2b": {
+"U": [
+"2308",
+"2301",
+"3015",
+"6412",
+"6282",
+"6409",
+"3078"
+],
+"D": [
+"2357",
+"2353",
+"2376",
+"2377",
+"2324",
+"4938",
+"2385",
+"3515",
+"2362"
+]
+},
+"T2c": {
+"U": [
+"3017",
+"3324",
+"3653",
+"2421",
+"3338",
+"3483",
+"6230",
+"8996",
+"6805",
+"6275",
+"2486"
+],
+"D": [
+"2357",
+"2353",
+"2376",
+"2377",
+"2324",
+"4938",
+"2385",
+"3515",
+"2362"
+]
+},
+"T3": {
+"U": [
+"2408",
+"2344",
+"2337",
+"6770",
+"3006",
+"5351",
+"8299"
+],
+"D": [
+"3260",
+"2451",
+"8271",
+"4967",
+"5289",
+"4973",
+"3135",
+"8088"
+]
+},
+"T6": {
+"U": [
+"2379",
+"5269",
+"4966",
+"5274",
+"6526",
+"4968",
+"6756",
+"6104",
+"8054"
+],
+"D": [
+"2345",
+"6285",
+"3596",
+"5388",
+"3380",
+"4906",
+"2332",
+"3704"
+]
+},
+"T7": {
+"U": [
+"3105",
+"8086",
+"2455",
+"4991",
+"3707",
+"3081"
+],
+"D": [
+"3163",
+"3234",
+"3363",
+"3450",
+"4908",
+"4971",
+"4977",
+"4979",
+"6442",
+"6451",
+"6588"
+]
+},
+"T8": {
+"U": [
+"1402",
+"1409",
+"1434",
+"1440",
+"1444",
+"1455",
+"1460",
+"1414",
+"1447",
+"1452",
+"1457",
+"1466",
+"1467",
+"1474",
+"4414"
+],
+"D": [
+"1476",
+"1477",
+"4438"
+]
+},
+"T9": {
+"U": [
+"5306",
+"2106",
+"2105"
+],
+"D": [
+"9921",
+"9914",
+"8933"
+]
+}
+}
+
+====================================================================================================
+檔案：seeds.csv（策略卡組合種子）｜sha256 16bcc31cafee826ab94056997cfa03b278ed1ae5228a3567583e6a774253ce1a
+====================================================================================================
+鏈號,鏈名,階段序,階段名,代號,名稱
+1,伺服器PCB,1,CCL銅箔基板,2383,台光電
+1,伺服器PCB,1,CCL銅箔基板,6274,台燿
+1,伺服器PCB,1,CCL銅箔基板,6213,聯茂
+1,伺服器PCB,2,PCB,2368,金像電
+1,伺服器PCB,2,PCB,3044,健鼎
+1,伺服器PCB,2,PCB,2313,華通
+1,伺服器PCB,3,伺服器組裝,2382,廣達
+1,伺服器PCB,3,伺服器組裝,3231,緯創
+1,伺服器PCB,3,伺服器組裝,6669,緯穎
+2,筆電,1,電池模組,6121,新普
+2,筆電,1,電池模組,3211,順達
+2,筆電,1,電源,6412,群電
+2,筆電,1,電源,6282,康舒
+2,筆電,1,散熱,3324,雙鴻
+2,筆電,1,散熱,3338,泰碩
+2,筆電,2,筆電代工,2324,仁寶
+2,筆電,2,筆電代工,2356,英業達
+2,筆電,2,筆電代工,2382,廣達
+2,筆電,3,品牌,2357,華碩
+2,筆電,3,品牌,2353,宏碁
+3,DRAM,1,DRAM晶片,2408,南亞科
+3,DRAM,1,DRAM晶片,2344,華邦電
+3,DRAM,2,記憶體模組,3260,威剛
+3,DRAM,2,記憶體模組,8271,宇瞻
+3,DRAM,2,記憶體模組,4967,十銓
+4,NAND/SSD,1,控制器,8299,群聯
+4,NAND/SSD,2,儲存產品,3260,威剛
+4,NAND/SSD,2,儲存產品,2451,創見
+4,NAND/SSD,2,儲存產品,8271,宇瞻
+5,顯示器,1,驅動IC,3034,聯詠
+5,顯示器,1,驅動IC,3545,敦泰
+5,顯示器,1,驅動IC,4961,天鈺
+5,顯示器,1,面板,2409,友達
+5,顯示器,1,面板,3481,群創
+6,寬頻網通,1,網通IC,2379,瑞昱
+6,寬頻網通,1,網通IC,2454,聯發科
+6,寬頻網通,2,網通設備,3596,智易
+6,寬頻網通,2,網通設備,5388,中磊
+6,寬頻網通,2,網通設備,6285,啟碁
+7,高速光通訊,1,磊晶與晶片,3081,聯亞
+7,高速光通訊,1,磊晶與晶片,3234,光環
+7,高速光通訊,2,光模組,4979,華星光
+7,高速光通訊,2,光模組,4908,前鼎
+7,高速光通訊,1,互連元件,3363,上詮
+7,高速光通訊,1,互連元件,3163,波若威
+8,成衣,1,布料加工,1460,宏遠
+8,成衣,1,布料加工,1452,宏益
+8,成衣,1,布料加工,1434,福懋
+8,成衣,2,成衣,1476,儒鴻
+8,成衣,2,成衣,1477,聚陽
+8,成衣,2,成衣,4438,廣越
+9,自行車,1,零件,5306,桂盟
+9,自行車,1,零件,1517,利奇
+9,自行車,1,零件,2106,建大
+9,自行車,2,整車,9921,巨大
+9,自行車,2,整車,9914,美利達
+10,晶圓廠擴產,1,矽晶圓材料,6488,環球晶
+10,晶圓廠擴產,1,矽晶圓材料,3532,台勝科
+10,晶圓廠擴產,1,矽晶圓材料,6182,合晶
+10,晶圓廠擴產,1,設備廠務,3131,弘塑
+10,晶圓廠擴產,1,設備廠務,3583,辛耘
+10,晶圓廠擴產,1,設備廠務,2404,漢唐
+10,晶圓廠擴產,1,設備廠務,6196,帆宣
+10,晶圓廠擴產,2,晶圓代工,2330,台積電
+10,晶圓廠擴產,2,晶圓代工,2303,聯電
+10,晶圓廠擴產,2,晶圓代工,5347,世界
+
+
+====================================================================================================
+檔案：red_ratio.csv（減資換股比）｜sha256 2a9de3b082d669be89844023f505df45c44bc250ca06b20228d1f9af79dd3352
+====================================================================================================
+code,date,swap,refund,post_shares,pre_shares,refund_total,src
+3234,20160901,0.6999999971105528,3.0000000288944717,72678262,103826089,311478270,"重訊2016-06-06「公告本公司董事長訂定減資基準日」：已發行103,826,089股、減資後72,678,262股、減資金額311,478,270元"
+3105,20160923,0.6948863611318423,3.051136388681577,407666384,586666262,1789998780,"重訊2016-08-11「公告本公司換發股票作業計畫書及減資換發股票基準日等相關事宜」：換發586,666,262股、減資後407,666,384股、減資1,789,998,780元（每仟股換發694.8863611股）"
+2316,20191007,0.9,1.0,203045040,225605600,225605600,"重訊2019-08-09「訂定現金減資基準日、減資換股基準日及減資換發股票作業計畫」：已發行225,605,600股、減資後203,045,040股、每股退還1元"
+5469,20241021,0.9199999170390435,0.8000008296095646,486166000,528441352,422753520,"重訊2024-08-06「訂定減資基準日、減資換股基準日及換股作業計劃」：已發行528,441,352股、減資後486,166,000股、每仟股退還800元"
+
+
+====================================================================================================
+檔案：樣本外檢定事前登記｜sha256 c94374f74e23013fead925e643815d85d8033913e357a87d8239659e6acdf2b3
+====================================================================================================
+{
+ "策略": "058 多空配置-供應鏈資訊傳遞與庫存錯配策略",
+ "文件": "正式策略包 V02／R01 樣本外檢定事前登記",
+ "登記時間": "2026-11-05 17:54:08 台灣時間",
+ "登記時點說明": "任何樣本外（形成截點 2022-10-15 起）訊號或報酬計算之前；反向組合樣本內亦尚未計算報酬（僅以除錯模式核對籃子筆數）",
+ "依據": "Ed 2026-11-05 17:43 回覆「Ｂ」：以 T 版反向組合做正式策略包，樣本外只開一次（D-058-20261105-1743-1）；E-Test T 版 D-058-20261105-1228-1",
+ "唯一主檢定": {
+  "組合ID": "TR-M（T 版反向主組合；來源：討論衍生）",
+  "成分": "subt.json（Emit 題材分類表現行回溯，10 條子鏈，135 檔：上游 85、下游 66），與快篩 T 版相同",
+  "方向": "每條子鏈做多全部合格『DIO 年增』上游、放空全部合格『G3 連兩次減速』下游；兩腿各半名目、腿內等權；子鏈報酬＝（多方腿平均−空方腿平均）÷2",
+  "其餘規則": "訊號、門檻（收盤≥10 元、20 日均額≥5,000 萬、上市櫃滿 20 日）、同鏈同月雙角色排除、截點後首個交易日開盤進場、下一截點後首個交易日開盤出場、L1＋L2 可成交檢查（放空腿改為下游）、整籃取消、出場順延、子鏈未平倉暫停，均與快篩 T 版相同",
+  "主組合": "每月至少兩條子鏈成交才成批；各子鏈固定 1/10 名目，未成交子鏈留現金；含未完成籃的月份不列入主組合",
+  "通過條件": "樣本外 TR-M 平均報酬＞0 且 bt_stats 單樣本 t 檢定雙尾 p＜0.05（一批一筆，無群聚）；只檢定一次，不因結果改條件、改切點或改組合",
+  "未通過": "本案無候選組合，依執行計畫『無候選結案』由 Ed 決定"
+ },
+ "同時揭露（描述，不另作通過判定）": [
+  "TR 系列：P 子鏈籃子層（批次聚合 p）、L／S 兩腿、各子鏈、M-eq",
+  "T 版原方向（TO 系列）樣本內＋樣本外",
+  "策略卡組合原方向（C 系列）樣本內＋樣本外"
+ ],
+ "公司行動口徑": {
+  "現金增資除權": "依研究預設口徑 V04：主結果視為不認購（固定股數、只承受除權價差，多空相同）；敏感度：留現金（除權前一交易日收盤出清，其後持現金）、全損（該腿損失全部名目）。快篩曾把含現增除權的籃列為未完成，正式版改依 V04（D-058 無另行指定）",
+  "減資": "換股比＝減資後換發股數÷減資前已發行股數、每股退還現金＝減資金額÷減資前已發行股數（現金減資），均取自公司重大訊息定案公告原文；查無者該腿列未完成，不以參考價反推",
+  "無出場價": "該籃列未完成，不推估"
+ },
+ "樣本切點": "沿用 058_樣本切點凍結紀錄_20261105.json：樣本內形成截點 2014-06-15～2022-07-15；隔離 2022-08-15、2022-09-15；樣本外 2022-10-15～2026-09-15（2026-10-15 批尚未出場，不列）。最新年度＝樣本外最後 12 批（2025-10-15～2026-09-15），屬樣本外子集，不另作檢定",
+ "敏感度測試（僅在通過時做）": "依策略卡 S2 規定只變動營收減速連續次數 1／2／4 次（2 為現行），DIO 年增條件固定；3 組，樣本內、樣本外並列；不得看結果後增減",
+ "多重檢定揭露": "樣本內已看過三個方向／版本（策略卡組合、T 版原方向、T 版反向由前者取負號推得）；樣本外只做上述一次主檢定。樣本內各版本 Holm 修正照列",
+ "輸入檔 sha256": {
+  "subt.json": "aa358b59bd76ee6879e911af9f68bba81fa91add233772681de82c4cc9c83bbb",
+  "seeds.csv": "16bcc31cafee826ab94056997cfa03b278ed1ae5228a3567583e6a774253ce1a",
+  "code/signals.py": "c00db6d5938316b5c8f815b784994d4d875d8e178975ea74333b01a412f9ac21",
+  "code/engine.py": "dc5b966ebce432717e2cf292ae80e333d6d48ad9b52345cf41f3bae74ecd9dd5",
+  "code/run_fp.py": "f807449ea65ec88b75f29260916992055b9654806878ae774bd25f652eb4da5d",
+  "margin_all.csv": "89c6a63e5e6d7363de4275fa940624b0ccf17af6b3e291618c5f2b6dfce0da1f",
+  "fund_mops.csv": "3d62dfc2c6310f8fa52ab6a16dd46633667871320e88ca53209bc94940971f24",
+  "fund_mops_t.csv": "248b76e3097ad505c31eeb31ad68a243c040f06de44a4459d7959d3314309a54",
+  "px_all.csv": "30bc1d0c504295d5cc13d5cd508105bfb0abdbac53d1b568abeeb2eb7c6536cc",
+  "px_seeds.csv": "2c8b367f52bca92751c45488ed9b3dc61b0d8ad3657d56b202fc086cd4c4e640",
+  "共用統計函式_bt_stats_v1.2.py": "e99c85e9a9da8c593a727175cd5a0cc019d679552c75e8b1cef42fa62d5a20ee",
+  "058_樣本切點凍結紀錄_20261105.json": "600819cb5ed05afe12c59b8f4ac7bf10d65796e621b472529c5c28d5143f9703"
+ }
+}
+
+====================================================================================================
+檔案：樣本切點凍結紀錄｜sha256 600819cb5ed05afe12c59b8f4ac7bf10d65796e621b472529c5c28d5143f9703
+====================================================================================================
+{
+ "策略": "058 多空配置-供應鏈資訊傳遞與庫存錯配策略",
+ "策略卡": "V02（報酬口徑 V03）",
+ "適用": "S2（S1 不可測，未啟動）",
+ "凍結時間": "2026-11-05 02:51:55 台灣時間",
+ "凍結時點說明": "計算任何報酬之前；只用訊號次數（形成月份批次），未讀取或計算任何持有期間價格報酬",
+ "切點規則": "策略卡共用規格：依形成月份批次數約 2/3：1/3，隔離不少於 40 交易日且不少於最長持有期，跨切點部位排除",
+ "形成批次定義": "任一子鏈當月同時有合格下游減速與合格上游累庫者",
+ "批次數": {
+  "全期": 139,
+  "樣本內": 93,
+  "版本說明": "純度暫定版 139 批、未套純度版 140 批，兩版切點相同"
+ },
+ "樣本內": "形成截點 2014-06-15 至 2022-07-15（最後一批 2022-07-18 開盤進場、2022-08-16 開盤出場）",
+ "隔離帶": "形成截點 2022-08-15、2022-09-15 兩批不計入任何一段",
+ "樣本外": "形成截點 2022-10-15 起（首批 2022-10-17 開盤進場，距樣本內最後出場 42 個交易日）至資料終點；正式策略包前封存",
+ "最長持有": "23 個交易日區間（截點後首個交易日開盤至下月截點後首個交易日開盤）",
+ "交易日曆": "種子 63 檔官方日成交紀錄聯集（sector-tracker archive/raw twse、tpex），快篩前改以官方交易日曆核對",
+ "修正規則": "之後資料或純度修正不重選切點，只揭露（防錯清單 D5）"
+}
+
+====================================================================================================
+檔案：code/run_is.py（快篩：樣本內回測，策略卡組合與 T 版）｜sha256 d86e01bbdde8061d2a6f3405908717bdc746f596f03a76b9b83f3b50fb736ec2
+====================================================================================================
+# 058 S2 樣本內快篩：只跑凍結紀錄的樣本內形成截點 2014-06-15～2022-07-15；樣本外不計算
+import sys, csv, collections, datetime as dt, statistics as st
+sys.path.insert(0,'/home/claude/w058/code'); import signals as S, engine as E
+IS_FIRST,IS_LAST='20140615','20220715'
+cuts=[f"{y}{m:02d}15" for y in range(2014,2023) for m in range(1,13) if IS_FIRST<=f"{y}{m:02d}15"<=IS_LAST]
+def elig(c,cut):
+    sd=max(x for x in E.TD if x<=cut); i=E.TI[sd]; win=E.TD[i-20:i]
+    x=E.PX[c].get(sd); lst=E.LIST.get(c,'')
+    if not x or not x['c']: return False,'訊號日無收盤'
+    if lst and lst>win[0]: return False,'未滿上市櫃20日'
+    if x['c']<10: return False,'收盤<10元'
+    a=sum(E.PX[c][d]['a'] if d in E.PX[c] else 0 for d in win)/20
+    if a<5e7: return False,'20日均額<5000萬'
+    return True,''
+legs=[]; baskets=[]; sigrows=[]
+busy={}   # 子鏈 -> 最後出場日（未平倉資金不可重用）
+for k,cut in enumerate(cuts):
+    y,m=int(cut[:4]),int(cut[4:6]); cutdt=dt.datetime(y,m,15,23,59)
+    rm=(y,m-1) if m>1 else (y-1,12)
+    entry=E.nxt(cut); nextcut=f"{y+(m==12)}{(m%12)+1:02d}15"; xt=E.nxt(nextcut)
+    # 角色判定
+    role={}
+    for sub,mem in S.SUB.items():
+        for c in mem['D']:
+            ok,why=elig(c,cut); g=[S.G3(c,S.add(rm,-i)) for i in range(3)]
+            if not ok: st_=None; why2=why
+            elif None in g: st_=None; why2='G3不足'
+            elif S.rev_unverified(c,rm,cut): st_=None; why2='營收版本未驗證'
+            else: st_=g[0]<g[1]<g[2]; why2=f'G3 {g[0]:.4f}<{g[1]:.4f}<{g[2]:.4f}' if st_ else 'G3未連兩次減速'
+            role[(sub,'D',c)]=(st_,why2)
+        for c in mem['U']:
+            ok,why=elig(c,cut)
+            if not ok: role[(sub,'U',c)]=(None,why); continue
+            a,why2=S.fin_status(c,cutdt); role[(sub,'U',c)]=(a,why2)
+    # 同鏈同月同時符合兩角色者兩邊排除
+    both=set()
+    for ch in set(S.CHAIN.values()):
+        subs=[s for s in S.SUB if S.CHAIN[s]==ch]
+        dset={c for s in subs for c in S.SUB[s]['D'] if role[(s,'D',c)][0]}
+        uset={c for s in subs for c in S.SUB[s]['U'] if role[(s,'U',c)][0]}
+        both|={(ch,c) for c in dset&uset}
+    for (sub,r,c),(v,why) in role.items():
+        sigrows.append([cut,sub,r,c,v,why,(S.CHAIN[sub],c) in both])
+    for sub,mem in S.SUB.items():
+        ch=S.CHAIN[sub]
+        L=[c for c in mem['D'] if role[(sub,'D',c)][0] and (ch,c) not in both]
+        Sh=[c for c in mem['U'] if role[(sub,'U',c)][0] and (ch,c) not in both]
+        rec=dict(cut=cut,sub=sub,entry=entry,longs=' '.join(L),shorts=' '.join(Sh),status='',reason='',ret=None,ret_s1=None,rl=None,rs=None,exit='',hold=None,gap='')
+        if not L or not Sh: rec['status']='無訊號'; baskets.append(rec); continue
+        if busy.get(sub) and busy[sub]>entry: rec['status']='暫停'; rec['reason']=f'前期部位未平倉至{busy[sub]}'; baskets.append(rec); continue
+        fail=[]
+        for side,cs in (('L',L),('S',Sh)):
+            for c in cs:
+                ok,why=E.can_enter(c,entry,side)
+                if not ok: fail.append(f'{c}{side}:{why}')
+        if fail: rec['status']='取消'; rec['reason']='；'.join(fail); baskets.append(rec); continue
+        rL=[];rS=[];rL1=[];rS1=[];xs=[];g=[]
+        for side,cs in (('L',L),('S',Sh)):
+            for c in cs:
+                ep=E.PX[c][entry]['o']; xd,xp,dl=E.exit_day(c,xt,side)
+                if xd is None: g.append(f'{c}無出場價'); continue
+                r=E.leg_return(c,entry,ep,xd,xp); gp=E.gaps(c,entry,xd)
+                legs.append(dict(cut=cut,sub=sub,side=side,code=c,entry=entry,entry_px=ep,exit=xd,exit_px=xp,delay=dl,ret=r,gap='；'.join(gp),
+                                 hold=E.TI[xd]-E.TI[entry]))
+                (rL1 if side=='L' else rS1).append(r)
+                if gp: g+= [f'{c}{x}' for x in gp]
+                else: (rL if side=='L' else rS).append(r)
+                xs.append(xd)
+        rec['exit']=max(xs) if xs else ''; rec['hold']=E.TI[rec['exit']]-E.TI[entry] if xs else None
+        busy[sub]=rec['exit'] or busy.get(sub)
+        rec['ret_s1']=(st.mean(rL1)-st.mean(rS1))/2 if rL1 and rS1 else None
+        if g: rec['status']='未完成'; rec['gap']='；'.join(g)
+        else:
+            rec['status']='成交'; rec['rl']=st.mean(rL); rec['rs']=st.mean(rS); rec['ret']=(rec['rl']-rec['rs'])/2
+        baskets.append(rec)
+W='/home/claude/w058/out'+('_t' if S.V=='T' else ''); import os; os.makedirs(W,exist_ok=True)
+def dump(name,rows,cols):
+    w=csv.writer(open(f'{W}/{name}',"w",encoding='utf-8',newline='')); w.writerow(cols)
+    for r in rows: w.writerow([r.get(c,'') if isinstance(r,dict) else r[i] for i,c in enumerate(cols)])
+dump('signals_is.csv',sigrows,['cut','sub','role','code','signal','why','both_role_excluded'])
+dump('baskets_is.csv',baskets,['cut','sub','entry','exit','hold','longs','shorts','status','reason','gap','rl','rs','ret','ret_s1'])
+dump('legs_is.csv',legs,['cut','sub','side','code','entry','entry_px','exit','exit_px','delay','hold','ret','gap'])
+c=collections.Counter((b['status']) for b in baskets); print(c)
+print(collections.Counter(b['sub'] for b in baskets if b['status']=='成交'))
+
+
+====================================================================================================
+檔案：code/stats_is.py（快篩：策略卡組合統計）｜sha256 5b54694cdc153152409d015733aaa67eb1edd7e69867c3265a6ae003086b3d5e
+====================================================================================================
+import sys, pandas as pd, numpy as np
+sys.path.insert(0,'/home/claude/w058'); sys.path.insert(0,'/home/claude/w058/code')
+import elon_tools as ET, engine as E
+bt=ET.load_bt_stats('/home/claude/w058/共用統計函式_bt_stats_v1.2.py')
+B=pd.read_csv('/home/claude/w058/out/baskets_is.csv',dtype={'cut':str,'entry':str,'exit':str})
+NSUB=10
+T=B[B.status=='成交'].copy()
+def iso(d): d=str(d); return f"{d[:4]}-{d[4:6]}-{d[6:]}"
+def mk(df,combo,retcol,cluster=None):
+    out=pd.DataFrame({'trade_id':[f'{combo}-{i:04d}' for i in range(len(df))],'combo':combo,'is_etest':False,'symbol':df['sub'].values if 'sub' in df else '',
+        'info_time':[iso(c)+' 23:59' for c in df.cut],'entry_time':[iso(e)+' 09:00' for e in df.entry],'entry_date':[iso(e) for e in df.entry],
+        'entry_px':np.nan,'exit_date':[iso(e) for e in df.exit],'exit_px':np.nan,'ret':df[retcol].values,'hold_days':df.hold.values.astype(int),
+        'cluster':(df.cut.values if cluster else None),'sample':'樣本內','excluded_reason':None})
+    return out
+# M：每月跨子鏈（至少兩條子鏈成交），各子鏈 1/10 名目，未成交留現金
+g=T.groupby('cut')
+M=pd.DataFrame({'cut':g.size().index,'n':g.size().values,'entry':g.entry.first().values,'exit':g.exit.max().values,
+                'hold':[E.TI[x]-E.TI[e] for e,x in zip(g.entry.first(),g.exit.max())],
+                'ret':g.ret.sum().values/NSUB,'ret_eq':g.ret.mean().values,'rl':g.rl.sum().values/NSUB,'nrs':-g.rs.sum().values/NSUB})
+M2=M[M.n>=2].copy()
+tabs={}
+tabs['M 主組合：跨子鏈（≥2條成交，各1/10名目）']=mk(M2,'M','ret')
+tabs['M-eq 跨子鏈已成交子鏈等權（描述）']=mk(M2,'M-eq','ret_eq')
+tabs['P 子鏈籃子層（全部成交籃，批次聚合）']=mk(T,'P','ret',cluster=True)
+tabs['L 多方腿（下游減速）']=mk(T.assign(x=T.rl),'L','x',cluster=True)
+tabs['S 空方腿（−上游累庫報酬）']=mk(T.assign(x=-T.rs),'S','x',cluster=True)
+for s in ['1a','1b','2a','2b','2c','2d','6','7a','8','9']:
+    tabs[f'子鏈 {s}']=mk(T[T['sub']==s],f'sub{s}','ret')
+tabs['✓子集（第9鏈，描述）']=mk(T[T['sub']=='9'],'chk','ret')
+rows=[];dds=[]
+for name,df in tabs.items():
+    cu='批次' if df.cluster.notna().all() and len(df) else None
+    t=ET.ten_table(df,bt,by=('combo',),cluster_unit=cu); t.insert(0,'組合',name); rows.append(t)
+    if len(df)>=2: d=ET.dd_table(df,bt,by=('combo',)); d.insert(0,'組合',name); dds.append(d)
+R=pd.concat(rows); D=pd.concat(dds)
+pd.set_option('display.width',250); pd.set_option('display.max_columns',30)
+print(R[['組合','樣本數','平均報酬','平均持有交易日數','單利年化','勝率','賠率R','凱利','標準差','t值','雙尾p']+[c for c in ['聚合單位數','聚合p'] if c in R]].to_string(index=False))
+print(D[['組合','最大回撤','最差三次回撤平均','最長回撤期筆數','最長回撤期日曆日','最長回撤期未回復']].to_string(index=False))
+R.to_csv('/home/claude/w058/out/stats_is.csv',index=False); D.to_csv('/home/claude/w058/out/dd_is.csv',index=False)
+M.to_csv('/home/claude/w058/out/batches_is.csv',index=False)
+import pickle; pickle.dump(tabs,open('/home/claude/w058/out/tabs.pkl','wb'))
+
+
+====================================================================================================
+檔案：code/stats_t.py（快篩：T 版統計）｜sha256 72b2c6762e8e55964ccdcb9c764efd7eaa074518a3e2be018b356eae02f99dc5
+====================================================================================================
+import sys, pandas as pd, numpy as np
+sys.path.insert(0,'/home/claude/w058'); sys.path.insert(0,'/home/claude/w058/code')
+import os; os.environ['V058']='T'
+import elon_tools as ET, engine as E
+bt=ET.load_bt_stats('/home/claude/w058/共用統計函式_bt_stats_v1.2.py')
+B=pd.read_csv('/home/claude/w058/out_t/baskets_is.csv',dtype={'cut':str,'entry':str,'exit':str})
+NSUB=10
+T=B[B.status=='成交'].copy()
+inc=set(B[B.status=='未完成'].cut)   # 該月有未完成籃（現增除權、減資、無出場價）→主組合排除該月，另列 S1
+TS1=B[B.status.isin(['成交','未完成'])&B.ret_s1.notna()].copy(); TS1['ret']=TS1.ret_s1
+def iso(d): d=str(d); return f"{d[:4]}-{d[4:6]}-{d[6:]}"
+def mk(df,combo,retcol,cluster=None):
+    out=pd.DataFrame({'trade_id':[f'{combo}-{i:04d}' for i in range(len(df))],'combo':combo,'is_etest':False,'symbol':df['sub'].values if 'sub' in df else '',
+        'info_time':[iso(c)+' 23:59' for c in df.cut],'entry_time':[iso(e)+' 09:00' for e in df.entry],'entry_date':[iso(e) for e in df.entry],
+        'entry_px':np.nan,'exit_date':[iso(e) for e in df.exit],'exit_px':np.nan,'ret':df[retcol].values,'hold_days':df.hold.values.astype(int),
+        'cluster':(df.cut.values if cluster else None),'sample':'樣本內','excluded_reason':None})
+    return out
+# M：每月跨子鏈（至少兩條子鏈成交），各子鏈 1/10 名目，未成交留現金
+g=T.groupby('cut')
+M=pd.DataFrame({'cut':g.size().index,'n':g.size().values,'entry':g.entry.first().values,'exit':g.exit.max().values,
+                'hold':[E.TI[x]-E.TI[e] for e,x in zip(g.entry.first(),g.exit.max())],
+                'ret':g.ret.sum().values/NSUB,'ret_eq':g.ret.mean().values,'rl':g.rl.sum().values/NSUB,'nrs':-g.rs.sum().values/NSUB})
+M2=M[(M.n>=2)&(~M.cut.isin(inc))].copy()
+g1=TS1.groupby('cut'); M1=pd.DataFrame({'cut':g1.size().index,'n':g1.size().values,'entry':g1.entry.first().values,'exit':g1.exit.max().values,
+    'hold':[E.TI[x]-E.TI[e] for e,x in zip(g1.entry.first(),g1.exit.max())],'ret':g1.ret.sum().values/NSUB}); M1=M1[M1.n>=2]
+tabs={}
+tabs['M 主組合：跨子鏈（≥2條成交，各1/10名目）']=mk(M2,'M','ret')
+tabs['M-eq 跨子鏈已成交子鏈等權（描述）']=mk(M2,'M-eq','ret_eq')
+tabs['M-S1 敏感度：未完成籃以不認購／實際可得價計入']=mk(M1,'M-S1','ret')
+tabs['P 子鏈籃子層（全部成交籃，批次聚合）']=mk(T,'P','ret',cluster=True)
+tabs['L 多方腿（下游減速）']=mk(T.assign(x=T.rl),'L','x',cluster=True)
+tabs['S 空方腿（−上游累庫報酬）']=mk(T.assign(x=-T.rs),'S','x',cluster=True)
+for s in ['T1a','T1b','T2a','T2b','T2c','T3','T6','T7','T8','T9']:
+    tabs[f'子鏈 {s}']=mk(T[T['sub']==s],f'sub{s}','ret')
+pass
+rows=[];dds=[]
+for name,df in tabs.items():
+    cu='批次' if df.cluster.notna().all() and len(df) else None
+    t=ET.ten_table(df,bt,by=('combo',),cluster_unit=cu); t.insert(0,'組合',name); rows.append(t)
+    if len(df)>=2: d=ET.dd_table(df,bt,by=('combo',)); d.insert(0,'組合',name); dds.append(d)
+R=pd.concat(rows); D=pd.concat(dds)
+pd.set_option('display.width',250); pd.set_option('display.max_columns',30)
+print(R[['組合','樣本數','平均報酬','平均持有交易日數','單利年化','勝率','賠率R','凱利','標準差','t值','雙尾p']+[c for c in ['聚合單位數','聚合p'] if c in R]].to_string(index=False))
+print(D[['組合','最大回撤','最差三次回撤平均','最長回撤期筆數','最長回撤期日曆日','最長回撤期未回復']].to_string(index=False))
+R.to_csv('/home/claude/w058/out_t/stats_is.csv',index=False); D.to_csv('/home/claude/w058/out_t/dd_is.csv',index=False)
+M.to_csv('/home/claude/w058/out_t/batches_is.csv',index=False)
+import pickle; pickle.dump(tabs,open('/home/claude/w058/out_t/tabs.pkl','wb'))
+
+
+====================================================================================================
+檔案：code/margin_extract.py（快篩：策略卡組合融券表抽取）｜sha256 d64ad0bcf9ef4719879be2f28589ff745a5fcf5c755f33b633eb9055152ad69d
+====================================================================================================
+# 抽出空方標的（各子鏈上游）之逐日融資融券表狀態：是否列為信用交易標的、註記、券限額
+import gzip, json, os, csv, sys
+sys.path.insert(0,'code'); import signals as S
+U=sorted({c for s in S.SUB.values() for c in s['U']})
+R='/home/claude/ed123698745ed-oss/sector-tracker/archive/raw'
+w=csv.writer(open('margin_up.csv','w',encoding='utf-8',newline='')); w.writerow(['date','mkt','code','listed','note','short_limit'])
+for mkt in ('twse_margin','tpex_margin'):
+    for f in sorted(os.listdir(f'{R}/{mkt}')):
+        d=f[:8]
+        if d<'20140501': continue
+        try: j=json.load(gzip.open(f'{R}/{mkt}/{f}'))
+        except Exception: continue
+        rows={}
+        for t in j.get('tables',[]):
+            fl=t.get('fields') or []
+            if mkt=='twse_margin' and fl[:2]==['代號','名稱']:
+                for r in t['data']: rows[r[0].strip()]=(r[15].strip() if len(r)>15 else '', r[13])
+            if mkt=='tpex_margin' and fl and fl[0].strip()=='代號':
+                for r in t['data']: rows[r[0].strip()]=(r[19].strip() if len(r)>19 else '', r[17])
+        if not rows: continue
+        for c in U:
+            if c in rows: w.writerow([d,mkt,c,1,rows[c][0],rows[c][1]])
+            else: w.writerow([d,mkt,c,0,'',''])
+print('ok')
+
+
+====================================================================================================
+檔案：code/fetch_ca.py（本機公司行動下載）｜sha256 5c2054068d19d790c6b3fa66af044d11ebf7fd328409aa9c2663fa5cbd309f09
+====================================================================================================
+# 058：FinMind 匿名下載公司行動（股利政策、除權息結果、減資恢復參考價）；054 已有者直接複製
+import json, os, time, csv, shutil, urllib.request, urllib.parse, urllib.error
+API="https://api.finmindtrade.com/api/v4/data"; OUT="raw_ca"; P54='/home/claude/mops-fetch-test/out/p054/px'
+codes=sorted({r['代號'] for r in csv.DictReader(open('seeds.csv',encoding='utf-8'))})
+DS=['TaiwanStockDividend','TaiwanStockDividendResult','TaiwanStockCapitalReductionReferencePrice']
+for c in codes:
+    for ds in DS:
+        f=f'{OUT}/{ds}_{c}.json'
+        if os.path.exists(f): continue
+        if os.path.exists(f'{P54}/{ds}_{c}.json'): shutil.copy(f'{P54}/{ds}_{c}.json',f); continue
+        url=API+'?'+urllib.parse.urlencode({'dataset':ds,'data_id':c,'start_date':'2012-01-01','end_date':'2026-11-05'})
+        while True:
+            try:
+                d=json.load(urllib.request.urlopen(url,timeout=90))
+            except urllib.error.HTTPError as e:
+                try: d=json.loads(e.read().decode('utf-8','ignore'))
+                except Exception: d={'status':e.code}
+            except Exception as e:
+                print('ERR',e,flush=True); time.sleep(20); continue
+            if d.get('status')==200:
+                json.dump(d,open(f,'w',encoding='utf-8'),ensure_ascii=False); print('OK',ds,c,len(d['data']),time.strftime('%H:%M:%S'),flush=True); break
+            print('WAIT',str(d.get('msg'))[:80],flush=True); time.sleep(120)
+print('DONE')
+
+
+====================================================================================================
+檔案：fetch_fm.py（盤點：FinMind 匿名下載）｜sha256 af21cd5dce119f185bc732dc8ee49b0025f7e9e643688e3449f6f24539fb7cc5
+====================================================================================================
+# 058：FinMind 匿名下載 月營收／綜合損益表／資產負債表（最終值），保存原始 JSON
+import json, os, sys, time, csv, urllib.request, urllib.parse, urllib.error
+API="https://api.finmindtrade.com/api/v4/data"; OUT="raw_finmind"
+codes=sorted({r['代號'] for r in csv.DictReader(open('seeds.csv',encoding='utf-8'))})
+log=open('fetch_fm_log.txt','a',encoding='utf-8')
+def get(p,path):
+    if os.path.exists(path): return
+    url=API+"?"+urllib.parse.urlencode(p)
+    for a in range(30):
+        try:
+            with urllib.request.urlopen(url,timeout=90) as r: d=json.load(r)
+        except urllib.error.HTTPError as e:
+            try: d=json.loads(e.read().decode('utf-8','ignore'))
+            except Exception: d={'status':e.code,'msg':str(e)}
+        except Exception as e:
+            print('ERR',p,e); time.sleep(15); continue
+        if d.get('status')==200:
+            json.dump(d,open(path,'w',encoding='utf-8'),ensure_ascii=False)
+            s=f"OK {p['dataset']} {p.get('data_id','')} {len(d.get('data',[]))} {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            print(s,flush=True); log.write(s+'\n'); log.flush(); return
+        print('WAIT',p,str(d.get('msg'))[:100],flush=True); time.sleep(90)
+for c in codes:
+    get({'dataset':'TaiwanStockMonthRevenue','data_id':c,'start_date':'2011-01-01','end_date':'2026-11-05'},f"{OUT}/MonthRevenue_{c}.json")
+    #get({'dataset':'TaiwanStockFinancialStatements','data_id':c,'start_date':'2011-01-01','end_date':'2026-11-05'},f"{OUT}/IS_{c}.json")
+    #get({'dataset':'TaiwanStockBalanceSheet','data_id':c,'start_date':'2011-01-01','end_date':'2026-11-05'},f"{OUT}/BS_{c}.json")
+print('DONE')
+
+
+====================================================================================================
+檔案：fetch_fm2.py（盤點：FinMind 匿名下載續抓）｜sha256 985477bfbcb8bfc56f54c4b62221f8d1ffa006da99f598cda9a36b7af520461e
+====================================================================================================
+# 058：FinMind 匿名下載 月營收／綜合損益表／資產負債表（最終值），保存原始 JSON
+import json, os, sys, time, csv, urllib.request, urllib.parse, urllib.error
+API="https://api.finmindtrade.com/api/v4/data"; OUT="raw_finmind"
+codes=sorted({r['代號'] for r in csv.DictReader(open('seeds.csv',encoding='utf-8'))})
+log=open('fetch_fm_log.txt','a',encoding='utf-8')
+def get(p,path):
+    if os.path.exists(path): return
+    url=API+"?"+urllib.parse.urlencode(p)
+    for a in range(30):
+        try:
+            with urllib.request.urlopen(url,timeout=90) as r: d=json.load(r)
+        except urllib.error.HTTPError as e:
+            try: d=json.loads(e.read().decode('utf-8','ignore'))
+            except Exception: d={'status':e.code,'msg':str(e)}
+        except Exception as e:
+            print('ERR',p,e); time.sleep(15); continue
+        if d.get('status')==200:
+            json.dump(d,open(path,'w',encoding='utf-8'),ensure_ascii=False)
+            s=f"OK {p['dataset']} {p.get('data_id','')} {len(d.get('data',[]))} {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            print(s,flush=True); log.write(s+'\n'); log.flush(); return
+        print('WAIT',p,str(d.get('msg'))[:100],flush=True); time.sleep(90)
+for c in codes:
+    pass #get({'dataset':'TaiwanStockMonthRevenue','data_id':c,'start_date':'2011-01-01','end_date':'2026-11-05'},f"{OUT}/MonthRevenue_{c}.json")
+    get({'dataset':'TaiwanStockFinancialStatements','data_id':c,'start_date':'2011-01-01','end_date':'2026-11-05'},f"{OUT}/IS_{c}.json")
+    get({'dataset':'TaiwanStockBalanceSheet','data_id':c,'start_date':'2011-01-01','end_date':'2026-11-05'},f"{OUT}/BS_{c}.json")
+print('DONE')
+
+
+====================================================================================================
+檔案：liq.py（盤點：流動性門檻檢查）｜sha256 a952b2117a284b8a235e61b04d2c1a6587f315b1d3bb13aa7f8627e90d1269cf
+====================================================================================================
+import csv, collections, datetime as dt
+px=collections.defaultdict(dict); days=set()
+for r in csv.DictReader(open('px_seeds.csv',encoding='utf-8')):
+    px[r['code']][r['date']]=r
+tw=sorted({r for c in px for r in px[c]})  # 種子聯集成交日 (近似交易日曆)
+L={r['公司代號']:r for r in csv.DictReader(open('/home/claude/mops-fetch-test/listing/上市櫃期間表.csv',encoding='utf-8-sig'))}
+cuts=[]
+for y in range(2014,2027):
+    for m in range(1,13):
+        d=f"{y}{m:02d}15"
+        if d< '20140615' or d>'20261015': continue
+        sd=max(x for x in tw if x<=d); i=tw.index(sd); cuts.append((d,sd,tw[i-20:i]))
+out=csv.writer(open('liq.csv','w',encoding='utf-8',newline='')); out.writerow(['截點','訊號日','代號','收盤','前20日均額','合格'])
+ok=collections.Counter(); n=collections.Counter()
+for c in sorted(px):
+    lst=L.get(c,{}).get('初次上市櫃日','')
+    for d,sd,prev in cuts:
+        r=px[c].get(sd)
+        if not r or not r['close'] or (lst and lst>prev[0]): q=0; cl=''; a=''
+        else:
+            cl=float(r['close']); a=sum(float(px[c][x]['amt'] or 0) if x in px[c] else 0 for x in prev)/20
+            q=int(cl>=10 and a>=5e7)
+        out.writerow([d,sd,c,cl,a,q]); ok[c]+=q; n[c]+=1
+for c in sorted(px): print(c, n[c], ok[c], f"{ok[c]/n[c]:.0%}")
+
+
+====================================================================================================
+檔案：s2_count.py（盤點：S2 訊號計數，只數訊號不算報酬）｜sha256 f1bde6e676ea0e6f88c6f3841c43ba759173cc1c64f3f19c305289a62d427c10
+====================================================================================================
+# 058 S2 訊號盤點（只數訊號，不算報酬）；初版用 FinMind 最終值＋法定期限保守可用日
+import json, csv, collections, calendar
+seeds=list(csv.DictReader(open('seeds.csv',encoding='utf-8')))
+# 子鏈提案（上游 -> 下游），廣達暫歸鏈1、威剛宇瞻暫歸鏈3
+SUB={'1a':(1,['1'],['2']),'1b':(1,['2'],['3']),
+     '2a':(2,['電池模組'],['2']),'2b':(2,['電源'],['2']),'2c':(2,['散熱'],['2']),'2d':(2,['2'],['3']),
+     '3':(3,['1'],['2']),'4':(4,['1'],['2']),'6':(6,['1'],['2']),'7a':(7,['磊晶與晶片'],['2']),'8':(8,['1'],['2']),'9':(9,['1'],['2'])}
+EXCL={('2','2382'),('4','3260'),('4','8271')}   # 跨鏈重複暫定歸屬
+def members(ch,keys):
+    out=[]
+    for r in seeds:
+        if r['鏈號']!=str(ch) or (r['鏈號'],r['代號']) in EXCL: continue
+        if r['階段序'] in keys or r['階段名'] in keys: out.append(r['代號'])
+    return sorted(set(out))
+g3={}; dec={}
+for r in csv.DictReader(open('s2_g3.csv',encoding='utf-8')):
+    if r['連兩次減速']!='': dec[(r['代號'],r['營收月m'])]=r['連兩次減速']=='1'
+liq={(r['截點'],r['代號']):r['合格']=='1' for r in csv.DictReader(open('liq.csv',encoding='utf-8'))}
+# DIO
+def qend(y,q): return f"{y}-{3*q:02d}-{[31,30,30,31][q-1]}"
+dio={}
+for c in {r['代號'] for r in seeds}:
+    inv={x['date']:x['value'] for x in json.load(open(f'raw_finmind/BS_{c}.json'))['data'] if x['type']=='Inventories'}
+    cogs={x['date']:x['value'] for x in json.load(open(f'raw_finmind/IS_{c}.json'))['data'] if x['type']=='CostOfGoodsSold'}
+    for y in range(2012,2027):
+        for q in range(1,5):
+            py,pq=(y,q-1) if q>1 else (y-1,4)
+            a,b,k=inv.get(qend(y,q)),inv.get(qend(py,pq)),cogs.get(qend(y,q))
+            if None in (a,b,k) or k<=0: continue
+            days=(90 if q==1 and not calendar.isleap(y) else 91 if q==1 else 91 if q==2 else 92)
+            dio[(c,y,q)]=(a+b)/2/k*days
+def latest_q(cut):  # 法定期限保守：Q4 於 4/15 起、Q1 於 6/15 起、Q2 於 8/15 起、Q3 於 11/15 起
+    y,m=int(cut[:4]),int(cut[4:6])
+    if m>=11: return (y,3)
+    if m>=8: return (y,2)
+    if m>=6: return (y,1)
+    if m>=4: return (y-1,4)
+    return (y-1,3)
+def accum(c,cut):
+    y,q=latest_q(cut)
+    a,b=dio.get((c,y,q)),dio.get((c,y-1,q))
+    if a is None or b is None: return None
+    return a>b
+cuts=sorted({k[0] for k in liq})
+rows=[]; cov=collections.Counter()
+for sub,(ch,up,dn) in SUB.items():
+    U,D=members(ch,up),members(ch,dn)
+    for cut in cuts:
+        y,m=int(cut[:4]),int(cut[4:6]); pm=(y,m-1) if m>1 else (y-1,12); mk=f"{pm[0]}-{pm[1]:02d}"
+        dsig=[c for c in D if liq.get((cut,c)) and dec.get((c,mk))]
+        usig=[c for c in U if liq.get((cut,c)) and accum(c,cut)]
+        both=set(dsig)&set(usig); dsig=[c for c in dsig if c not in both]; usig=[c for c in usig if c not in both]
+        dok=sum(1 for c in D if liq.get((cut,c)) and dec.get((c,mk)) is not None); uok=sum(1 for c in U if liq.get((cut,c)) and accum(c,cut) is not None)
+        rows.append((sub,cut,len(U),len(D),uok,dok,len(usig),len(dsig),int(bool(usig and dsig)),' '.join(usig),' '.join(dsig)))
+w=csv.writer(open('s2_signals_prelim.csv','w',encoding='utf-8',newline=''))
+w.writerow(['子鏈','截點','上游數','下游數','上游可判讀合格','下游可判讀合格','上游累庫','下游減速','成籃','上游名單','下游名單'])
+w.writerows(rows)
+tot=collections.Counter(); runs=collections.Counter()
+for sub in SUB:
+    rs=[r for r in rows if r[0]==sub]; s=[r[8] for r in rs]
+    n=sum(s); runcount=sum(1 for i,x in enumerate(s) if x and (i==0 or not s[i-1]))
+    print(sub, 'U',rs[0][2],'D',rs[0][3],'成籃月數',n,'/',len(s),'連續段',runcount)
+allm=sorted({r[1] for r in rows if r[8]})
+print('任一子鏈成籃的形成月數',len(allm),'首',allm[:1],'末',allm[-1:])
+
+
+====================================================================================================
+檔案：s2_count_purity.py（盤點：純度版訊號計數）｜sha256 243b18268583303453507425bdc1b86acfa67053898f1d8860c8f743e58c1c34
+====================================================================================================
+# 058 S2 訊號盤點（只數訊號，不算報酬）；初版用 FinMind 最終值＋法定期限保守可用日
+import json, csv, collections, calendar
+seeds=list(csv.DictReader(open('seeds.csv',encoding='utf-8')))
+# 子鏈提案（上游 -> 下游），廣達暫歸鏈1、威剛宇瞻暫歸鏈3
+SUB={'1a':(1,['1'],['2']),'1b':(1,['2'],['3']),
+     '2a':(2,['電池模組'],['2']),'2b':(2,['電源'],['2']),'2c':(2,['散熱'],['2']),'2d':(2,['2'],['3']),
+     '3':(3,['1'],['2']),'6':(6,['1'],['2']),'7a':(7,['磊晶與晶片'],['2']),'8':(8,['1'],['2']),'9':(9,['1'],['2'])}
+EXCL={('2','2382'),('4','3260'),('4','8271'),('4','8299'),('3','2344'),('6','2454'),('9','2106')}   # 跨鏈重複暫定歸屬
+def members(ch,keys):
+    out=[]
+    for r in seeds:
+        if r['鏈號']!=str(ch) or (r['鏈號'],r['代號']) in EXCL: continue
+        if r['階段序'] in keys or r['階段名'] in keys: out.append(r['代號'])
+    return sorted(set(out))
+g3={}; dec={}
+for r in csv.DictReader(open('s2_g3.csv',encoding='utf-8')):
+    if r['連兩次減速']!='': dec[(r['代號'],r['營收月m'])]=r['連兩次減速']=='1'
+liq={(r['截點'],r['代號']):r['合格']=='1' for r in csv.DictReader(open('liq.csv',encoding='utf-8'))}
+# DIO
+def qend(y,q): return f"{y}-{3*q:02d}-{[31,30,30,31][q-1]}"
+dio={}
+for c in {r['代號'] for r in seeds}:
+    inv={x['date']:x['value'] for x in json.load(open(f'raw_finmind/BS_{c}.json'))['data'] if x['type']=='Inventories'}
+    cogs={x['date']:x['value'] for x in json.load(open(f'raw_finmind/IS_{c}.json'))['data'] if x['type']=='CostOfGoodsSold'}
+    for y in range(2012,2027):
+        for q in range(1,5):
+            py,pq=(y,q-1) if q>1 else (y-1,4)
+            a,b,k=inv.get(qend(y,q)),inv.get(qend(py,pq)),cogs.get(qend(y,q))
+            if None in (a,b,k) or k<=0: continue
+            days=(90 if q==1 and not calendar.isleap(y) else 91 if q==1 else 91 if q==2 else 92)
+            dio[(c,y,q)]=(a+b)/2/k*days
+def latest_q(cut):  # 法定期限保守：Q4 於 4/15 起、Q1 於 6/15 起、Q2 於 8/15 起、Q3 於 11/15 起
+    y,m=int(cut[:4]),int(cut[4:6])
+    if m>=11: return (y,3)
+    if m>=8: return (y,2)
+    if m>=6: return (y,1)
+    if m>=4: return (y-1,4)
+    return (y-1,3)
+def accum(c,cut):
+    y,q=latest_q(cut)
+    a,b=dio.get((c,y,q)),dio.get((c,y-1,q))
+    if a is None or b is None: return None
+    return a>b
+cuts=sorted({k[0] for k in liq})
+rows=[]; cov=collections.Counter()
+for sub,(ch,up,dn) in SUB.items():
+    U,D=members(ch,up),members(ch,dn)
+    for cut in cuts:
+        y,m=int(cut[:4]),int(cut[4:6]); pm=(y,m-1) if m>1 else (y-1,12); mk=f"{pm[0]}-{pm[1]:02d}"
+        dsig=[c for c in D if liq.get((cut,c)) and dec.get((c,mk))]
+        usig=[c for c in U if liq.get((cut,c)) and accum(c,cut)]
+        both=set(dsig)&set(usig); dsig=[c for c in dsig if c not in both]; usig=[c for c in usig if c not in both]
+        dok=sum(1 for c in D if liq.get((cut,c)) and dec.get((c,mk)) is not None); uok=sum(1 for c in U if liq.get((cut,c)) and accum(c,cut) is not None)
+        rows.append((sub,cut,len(U),len(D),uok,dok,len(usig),len(dsig),int(bool(usig and dsig)),' '.join(usig),' '.join(dsig)))
+w=csv.writer(open('s2_signals_prelim_purity.csv','w',encoding='utf-8',newline=''))
+w.writerow(['子鏈','截點','上游數','下游數','上游可判讀合格','下游可判讀合格','上游累庫','下游減速','成籃','上游名單','下游名單'])
+w.writerows(rows)
+tot=collections.Counter(); runs=collections.Counter()
+for sub in SUB:
+    rs=[r for r in rows if r[0]==sub]; s=[r[8] for r in rs]
+    n=sum(s); runcount=sum(1 for i,x in enumerate(s) if x and (i==0 or not s[i-1]))
+    print(sub, 'U',rs[0][2],'D',rs[0][3],'成籃月數',n,'/',len(s),'連續段',runcount)
+allm=sorted({r[1] for r in rows if r[8]})
+print('任一子鏈成籃的形成月數',len(allm),'首',allm[:1],'末',allm[-1:])
+
+
+====================================================================================================
+檔案：s2_rev.py（盤點：下游營收減速訊號）｜sha256 c0fffa84fa8e09cd7eb8f2011e46e1a9598733f5221f735142a7439c10a35ffe
+====================================================================================================
+# 058 S2 下游月營收減速訊號（只算訊號，不看報酬）
+import json, csv, collections
+seeds=list(csv.DictReader(open('seeds.csv',encoding='utf-8')))
+rev={}
+for c in {r['代號'] for r in seeds}:
+    d=json.load(open(f'raw_finmind/MonthRevenue_{c}.json'))['data']
+    rev[c]={(x['revenue_year'],x['revenue_month']):x['revenue'] for x in d if x['revenue_year']>=2013}
+def add(ym,k):
+    y,m=ym; t=y*12+(m-1)+k; return (t//12, t%12+1)
+def G3(c,ym):
+    r=rev[c]
+    num=[r.get(add(ym,-i)) for i in range(3)]; den=[r.get(add(ym,-12-i)) for i in range(3)]
+    if None in num or None in den or sum(den)<=0: return None
+    return sum(num)/sum(den)-1
+out=[]
+for c in sorted(rev):
+    for y in range(2013,2027):
+        for m in range(1,13):
+            ym=(y,m)
+            if ym>(2026,9): continue
+            g=[G3(c,add(ym,-i)) for i in range(3)]
+            if g[0] is None: continue
+            dec = None if None in g else (g[0]<g[1]<g[2])
+            out.append((c,f"{y}-{m:02d}",g[0],dec))
+w=csv.writer(open('s2_g3.csv','w',encoding='utf-8',newline='')); w.writerow(['代號','營收月m','G3','連兩次減速'])
+for o in out: w.writerow([o[0],o[1],'' if o[2] is None else round(o[2],6),'' if o[3] is None else int(o[3])])
+cnt=collections.Counter((o[0]) for o in out if o[3])
+tot=collections.Counter((o[0]) for o in out if o[3] is not None)
+first={}
+for o in out:
+    if o[3] is not None: first.setdefault(o[0],o[1])
+for c in sorted(tot): print(c, first[c], tot[c], cnt[c], f"{cnt[c]/tot[c]:.0%}")
