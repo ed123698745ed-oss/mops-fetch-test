@@ -1,0 +1,18 @@
+抓取時間(UTC) 2026-11-08T14:04:08.785286
+經營權之爭	pages=19	items=372
+經營權爭奪	pages=4	items=68
+經營權保衛戰	pages=1	items=11
+市場派	pages=13	items=250
+委託書大戰	pages=2	items=23
+委託書爭奪	pages=1	items=5
+股權爭奪	pages=1	items=7
+敵意併購	pages=3	items=42
+自行召集	pages=1	items=6
+解任董事	pages=2	items=27
+董監席次	pages=1	items=15
+爭奪董事	pages=1	items=1
+董監改選	pages=3	items=50
+公開收購	pages=10	items=199
+股東臨時會 改選	pages=0	items=0
+經營權	pages=97	items=1939
+公司派	pages=27	items=526
